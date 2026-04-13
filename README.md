@@ -167,19 +167,80 @@ console.log(generateMarkdown(result)); // SUMMARY.md content
 - **Non-destructive** — never modifies your source code, only writes to `.archmap/`
 - **Fast** — scans a 100-file project in under 100ms
 
+## CI mode
+
+Run in your CI pipeline to enforce architectural rules:
+
+```bash
+# Fails with exit code 1 if rules are violated
+npx archmap ci
+
+# JSON output for CI parsing
+npx archmap ci --json
+
+# Adjust confidence threshold
+npx archmap ci --min-confidence 0.9
+```
+
+Detects:
+- Circular dependencies
+- Boundary violations (module A suddenly imports from module B)
+- Naming convention violations
+
+Example GitHub Actions:
+
+```yaml
+- name: Architecture check
+  run: npx archmap ci
+```
+
+## MCP Server
+
+archmap includes a built-in [MCP](https://modelcontextprotocol.io) server so AI agents can query your architecture in real-time instead of reading static files.
+
+### Setup with Claude Code
+
+Add to your project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "archmap": {
+      "command": "npx",
+      "args": ["archmap-mcp", "."]
+    }
+  }
+}
+```
+
+### Available tools
+
+| Tool | Description |
+|------|-------------|
+| `get_modules` | List all modules with public APIs |
+| `get_module` | Get details for a specific module |
+| `get_dependencies` | Query dependency graph (optionally filtered) |
+| `get_rules` | List architectural rules by confidence |
+| `get_contracts` | List implicit co-change contracts |
+| `check_impact` | Given a file, what else might need to change? |
+| `get_summary` | Full architecture summary as markdown |
+
+The `check_impact` tool is especially powerful — before modifying a file, the agent asks "what else might break?" and gets a precise answer.
+
 ## Supported languages
 
 - TypeScript / JavaScript (v0.1.0)
-- Python (planned)
+- Python (v0.2.0)
 - Go (planned)
 
 ## Roadmap
 
-- [ ] Python and Go parsers
-- [ ] MCP Server for real-time agent queries
+- [x] Python parser
+- [x] MCP Server for real-time agent queries
+- [x] CI mode (`archmap ci` — fail if rules are violated)
+- [ ] Go parser
 - [ ] Incremental scanning (only re-parse changed files)
 - [ ] TUI visualization (`archmap show` with interactive graph)
-- [ ] CI mode (`archmap ci` — fail if rules are violated)
 - [ ] VS Code extension
 
 ## License

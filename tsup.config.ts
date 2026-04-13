@@ -2,7 +2,7 @@ import { defineConfig } from 'tsup';
 
 export default defineConfig([
   {
-    entry: { 'bin/archmap': 'bin/archmap.ts' },
+    entry: { 'bin/archmap': 'bin/archmap.ts', 'bin/archmap-mcp': 'bin/archmap-mcp.ts' },
     format: ['esm'],
     target: 'node18',
     outDir: 'dist',

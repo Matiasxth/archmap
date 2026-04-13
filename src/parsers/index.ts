@@ -1,11 +1,13 @@
 import { readFile } from 'fs/promises';
 import { parseTypeScript } from './typescript-parser.js';
+import { parsePython } from './python-parser.js';
 import type { ParseResult } from '../types.js';
 import type { DiscoveredFile } from '../scanner/file-discovery.js';
 
 const PARSERS: Record<string, (content: string, filePath: string) => ParseResult> = {
   typescript: parseTypeScript,
-  javascript: parseTypeScript, // JS uses same parser
+  javascript: parseTypeScript,
+  python: parsePython,
 };
 
 export async function parseFile(file: DiscoveredFile): Promise<ParseResult | null> {

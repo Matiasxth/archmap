@@ -6,13 +6,15 @@ import { scanCommand } from '../src/commands/scan.js';
 import { rulesCommand } from '../src/commands/rules.js';
 import { hookCommand } from '../src/commands/hook.js';
 import { showCommand } from '../src/commands/show.js';
+import { ciCommand } from '../src/commands/ci.js';
+import { mcpCommand } from '../src/commands/mcp.js';
 
 const program = new Command();
 
 program
   .name('archmap')
   .description('Architecture-as-Code for AI Agents')
-  .version('0.1.0');
+  .version('0.2.0');
 
 program
   .command('init')
@@ -51,5 +53,19 @@ program
   .argument('<action>', 'install or remove')
   .option('-r, --root <path>', 'Root directory', '.')
   .action(hookCommand);
+
+program
+  .command('ci')
+  .description('Check architectural rules — exits non-zero on violations (for CI)')
+  .option('-r, --root <path>', 'Root directory', '.')
+  .option('--min-confidence <n>', 'Minimum rule confidence to enforce (0-1)', '0.8')
+  .option('--json', 'Output as JSON')
+  .action(ciCommand);
+
+program
+  .command('mcp')
+  .description('Start MCP server (stdio transport) for AI agent integration')
+  .option('-r, --root <path>', 'Root directory', '.')
+  .action(mcpCommand);
 
 program.parse();

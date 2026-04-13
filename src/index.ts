@@ -7,6 +7,7 @@ export { generateMarkdown } from './output/markdown-generator.js';
 export { writeOutput } from './output/writer.js';
 export { integrateWithAgents } from './output/agent-integrator.js';
 export { installHook, removeHook } from './git/hook-manager.js';
+export { createMcpServer, startMcpServer } from './mcp/server.js';
 
 export type {
   ArchmapConfig,

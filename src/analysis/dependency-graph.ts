@@ -20,7 +20,9 @@ export function buildDependencyGraph(
 
     for (const imp of result.imports) {
       if (imp.isRelative) {
-        const resolved = resolveRelativeImport(result.filePath, imp.source, root, fileSet);
+        const resolved = result.language === 'python'
+          ? resolvePythonImport(result.filePath, imp.source, fileSet)
+          : resolveRelativeImport(result.filePath, imp.source, root, fileSet);
         if (resolved) {
           const existing = edges.find(
             (e) => e.source === result.filePath && e.target === resolved,
@@ -107,6 +109,61 @@ function resolveRelativeImport(
       if (fileSet.has(indexFile)) return indexFile;
     }
   }
+
+  return null;
+}
+
+/**
+ * Resolve a Python import (dot notation) to a file path.
+ * "from .utils import foo" with file at "app/services/main.py" → "app/services/utils.py"
+ * "from models.user import User" → "models/user.py"
+ */
+function resolvePythonImport(
+  fromFile: string,
+  importSource: string,
+  fileSet: Set<string>,
+): string | null {
+  const dir = dirname(fromFile);
+
+  if (importSource.startsWith('.')) {
+    // Relative import: count leading dots
+    const dots = importSource.match(/^\.+/)![0].length;
+    const modulePath = importSource.slice(dots);
+
+    let baseDir = dir;
+    for (let i = 1; i < dots; i++) {
+      baseDir = dirname(baseDir);
+    }
+
+    if (!modulePath) {
+      // "from . import x" — refers to __init__.py in current package
+      const initFile = join(baseDir, '__init__.py').replace(/\\/g, '/');
+      return fileSet.has(initFile) ? initFile : null;
+    }
+
+    const asPath = modulePath.replace(/\./g, '/');
+    return resolvePythonPath(baseDir, asPath, fileSet);
+  }
+
+  // Absolute import: try from project root
+  const asPath = importSource.replace(/\./g, '/');
+  return resolvePythonPath('', asPath, fileSet);
+}
+
+function resolvePythonPath(
+  baseDir: string,
+  modulePath: string,
+  fileSet: Set<string>,
+): string | null {
+  const fullPath = baseDir ? join(baseDir, modulePath).replace(/\\/g, '/') : modulePath;
+
+  // Try as a file: module.py
+  const asFile = fullPath + '.py';
+  if (fileSet.has(asFile)) return asFile;
+
+  // Try as a package: module/__init__.py
+  const asPackage = join(fullPath, '__init__.py').replace(/\\/g, '/');
+  if (fileSet.has(asPackage)) return asPackage;
 
   return null;
 }

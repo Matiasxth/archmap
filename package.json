@@ -1,10 +1,11 @@
 {
   "name": "archmap",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Architecture-as-Code for AI Agents. Scan your codebase, generate machine-readable architecture maps.",
   "type": "module",
   "bin": {
-    "archmap": "./dist/bin/archmap.js"
+    "archmap": "./dist/bin/archmap.js",
+    "archmap-mcp": "./dist/bin/archmap-mcp.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -25,6 +26,10 @@
     "agent",
     "claude",
     "codex",
+    "mcp",
+    "model-context-protocol",
+    "python",
+    "ci",
     "static-analysis",
     "dependency-graph",
     "codebase",
@@ -44,6 +49,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "chalk": "^5.4.1",
     "commander": "^13.1.0",
     "fast-glob": "^3.3.3",
