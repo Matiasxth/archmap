@@ -1,11 +1,13 @@
 import simpleGit from 'simple-git';
-import { dirname } from 'path';
+import { dirname, relative, resolve } from 'path';
 import type { ModuleInfo, ImplicitContract, ArchmapConfig } from '../../types.js';
 import type { Signal } from './types.js';
 
 /**
  * Signals derived from git history analysis.
  * Covers: co-change patterns, removed dependencies, change frequency.
+ *
+ * All git paths are normalized to be relative to the scan root.
  */
 export async function collectHistorySignals(
   root: string,
@@ -15,7 +17,7 @@ export async function collectHistorySignals(
 ): Promise<Signal[]> {
   const signals: Signal[] = [];
 
-  // Co-change signals from existing contracts
+  // Co-change signals from existing contracts (already normalized by history-analyzer)
   signals.push(...contractsToSignals(contracts));
 
   // Git history deep analysis
@@ -24,8 +26,15 @@ export async function collectHistorySignals(
     const isRepo = await git.checkIsRepo();
     if (!isRepo) return signals;
 
+    // Compute prefix for path normalization
+    const gitRoot = (await git.raw(['rev-parse', '--show-toplevel']).catch(() => '')).trim().replace(/\\/g, '/');
+    const absRoot = resolve(root).replace(/\\/g, '/');
+    const prefix = gitRoot && absRoot !== gitRoot
+      ? relative(gitRoot, absRoot).replace(/\\/g, '/') + '/'
+      : '';
+
     signals.push(...await analyzeRemovedDependencies(git, config.gitHistory.maxCommits));
-    signals.push(...await analyzeChangeFrequency(git, modules, config.gitHistory.maxCommits));
+    signals.push(...await analyzeChangeFrequency(git, modules, config.gitHistory.maxCommits, prefix));
   } catch {
     // Git analysis is optional
   }
@@ -115,7 +124,7 @@ async function analyzeRemovedDependencies(git: any, maxCommits: number): Promise
 
 // --- Change Frequency ---
 
-async function analyzeChangeFrequency(git: any, modules: ModuleInfo[], maxCommits: number): Promise<Signal[]> {
+async function analyzeChangeFrequency(git: any, modules: ModuleInfo[], maxCommits: number, prefix: string): Promise<Signal[]> {
   const signals: Signal[] = [];
 
   try {
@@ -138,7 +147,13 @@ async function analyzeChangeFrequency(git: any, modules: ModuleInfo[], maxCommit
       }
       const match = trimmed.match(/^\d+\t\d+\t(.+)$/);
       if (match) {
-        fileCounts.set(match[1], (fileCounts.get(match[1]) ?? 0) + 1);
+        let fp = match[1].replace(/\\/g, '/');
+        // Normalize to scan root
+        if (prefix) {
+          if (!fp.startsWith(prefix)) continue;
+          fp = fp.slice(prefix.length);
+        }
+        fileCounts.set(fp, (fileCounts.get(fp) ?? 0) + 1);
       }
     }
 

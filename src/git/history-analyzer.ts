@@ -1,5 +1,5 @@
 import simpleGit from 'simple-git';
-import { dirname } from 'path';
+import { dirname, relative, resolve } from 'path';
 import type { ImplicitContract, ArchmapConfig } from '../types.js';
 
 interface CoChangeEntry {
@@ -14,6 +14,10 @@ interface CoChangeEntry {
 /**
  * Analyze git history to detect co-change patterns.
  * Files that frequently change together likely have an implicit contract.
+ *
+ * Path normalization: git log returns paths relative to the git root,
+ * but archmap works with paths relative to the scan root (--root).
+ * We compute the prefix between them and strip/filter accordingly.
  */
 export async function analyzeGitHistory(
   root: string,
@@ -24,6 +28,13 @@ export async function analyzeGitHistory(
   // Check if we're in a git repo
   const isRepo = await git.checkIsRepo();
   if (!isRepo) return [];
+
+  // Find git root and compute prefix to normalize paths
+  const gitRoot = (await git.raw(['rev-parse', '--show-toplevel']).catch(() => '')).trim().replace(/\\/g, '/');
+  const absRoot = resolve(root).replace(/\\/g, '/');
+  const prefix = gitRoot && absRoot !== gitRoot
+    ? relative(gitRoot, absRoot).replace(/\\/g, '/') + '/'
+    : '';
 
   // Check for shallow clone
   const revCount = await git.raw(['rev-list', '--count', 'HEAD']).catch(() => '0');
@@ -40,8 +51,8 @@ export async function analyzeGitHistory(
 
   if (!log.trim()) return [];
 
-  // Parse commits and their changed files
-  const commits = parseGitLog(log);
+  // Parse commits and their changed files, normalizing paths to scan root
+  const commits = parseGitLog(log, prefix);
 
   // Build co-change matrix
   const coChanges = buildCoChangeMatrix(commits);
@@ -66,8 +77,10 @@ export async function analyzeGitHistory(
 
 /**
  * Parse git log --numstat output into commit -> files map.
+ * Normalizes paths: strips prefix so paths are relative to scan root.
+ * Files outside the scan root are excluded.
  */
-function parseGitLog(log: string): Map<string, string[]> {
+function parseGitLog(log: string, prefix: string): Map<string, string[]> {
   const commits = new Map<string, string[]>();
   let currentCommit: string | null = null;
 
@@ -75,22 +88,25 @@ function parseGitLog(log: string): Map<string, string[]> {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    // Commit hash line (40 hex chars)
     if (/^[0-9a-f]{40}$/.test(trimmed)) {
       currentCommit = trimmed;
       commits.set(currentCommit, []);
       continue;
     }
 
-    // Numstat line: additions\tdeletions\tfilename
     if (currentCommit) {
       const match = trimmed.match(/^\d+\t\d+\t(.+)$/);
       if (match) {
-        const filePath = match[1];
-        // Skip binary files and non-source files
-        if (!filePath.includes('=>') && !filePath.startsWith('-')) {
-          commits.get(currentCommit)!.push(filePath.replace(/\\/g, '/'));
+        let filePath = match[1].replace(/\\/g, '/');
+        if (filePath.includes('=>') || filePath.startsWith('-')) continue;
+
+        // Normalize: strip prefix to make path relative to scan root
+        if (prefix) {
+          if (!filePath.startsWith(prefix)) continue; // Outside scan root
+          filePath = filePath.slice(prefix.length);
         }
+
+        commits.get(currentCommit)!.push(filePath);
       }
     }
   }
