@@ -9,6 +9,7 @@ import type { ScanResult, ScanOptions, ParseResult } from '../types.js';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
+import { getVersion } from '../utils/version.js';
 
 /**
  * Main scanner orchestrator.
@@ -105,9 +106,9 @@ export async function scanProject(
 
   return {
     manifest: {
-      version: '1.0.0',
+      version: getVersion(),
       generatedAt: new Date().toISOString(),
-      generatedBy: 'archmap@0.3.0',
+      generatedBy: `archmap@${getVersion()}`,
       repoRoot: root,
       languages,
       scanDuration,

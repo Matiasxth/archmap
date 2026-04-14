@@ -8,13 +8,14 @@ import { hookCommand } from '../src/commands/hook.js';
 import { showCommand } from '../src/commands/show.js';
 import { ciCommand } from '../src/commands/ci.js';
 import { mcpCommand } from '../src/commands/mcp.js';
+import { getVersion } from '../src/utils/version.js';
 
 const program = new Command();
 
 program
   .name('archmap')
   .description('Architecture-as-Code for AI Agents')
-  .version('0.2.0');
+  .version(getVersion());
 
 program
   .command('init')

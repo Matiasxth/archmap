@@ -105,7 +105,7 @@ describe('Integration: Full Scan', () => {
       config: DEFAULT_CONFIG,
     });
 
-    expect(result.manifest.version).toBe('1.0.0');
+    expect(result.manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(result.manifest.generatedBy).toContain('archmap');
     expect(result.manifest.languages).toContain('typescript');
     expect(result.manifest.scanDuration).toBeGreaterThan(0);

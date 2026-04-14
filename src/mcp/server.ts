@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
+import { getVersion } from '../utils/version.js';
 
 /**
  * archmap MCP Server.
@@ -12,7 +13,7 @@ import { existsSync } from 'fs';
 export function createMcpServer(root: string) {
   const server = new McpServer({
     name: 'archmap',
-    version: '0.2.0',
+    version: getVersion(),
   });
 
   const archmapDir = join(root, '.archmap');
