@@ -1,6 +1,7 @@
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { readFile } from 'fs/promises';
+import { createRequire } from 'module';
+import { existsSync } from 'fs';
 
 // web-tree-sitter types
 type TreeSitterParser = any;
@@ -63,14 +64,14 @@ async function getLanguage(language: string): Promise<TreeSitterLanguage | null>
   if (!wasmFile) return null;
 
   try {
-    // Resolve WASM file from tree-sitter-wasms package
     const wasmPath = resolveWasmPath(wasmFile);
+    if (!wasmPath) return null;
+
     const TSParser = await initTreeSitter();
     const lang = await TSParser.Language.load(wasmPath);
     languageCache.set(language, lang);
     return lang;
-  } catch (err) {
-    // Silently fall back — the regex parser will be used instead
+  } catch {
     return null;
   }
 }
@@ -110,13 +111,39 @@ export async function getLanguageObj(language: string): Promise<TreeSitterLangua
   return getLanguage(language);
 }
 
-function resolveWasmPath(wasmFile: string): string {
-  // Try require.resolve first
+/**
+ * Resolve WASM file path from tree-sitter-wasms package.
+ *
+ * Strategy (in order):
+ *   1. createRequire(import.meta.url).resolve() — works in ESM + bundled
+ *   2. import.meta.resolve() — native ESM resolution (Node 20+)
+ *   3. Walk known paths relative to this file and cwd
+ *
+ * Returns null if not found (caller falls back to regex parser).
+ */
+function resolveWasmPath(wasmFile: string): string | null {
+  // 1. createRequire — ESM-safe wrapper around require.resolve
   try {
+    const require = createRequire(import.meta.url);
     const pkgJson = require.resolve('tree-sitter-wasms/package.json');
-    return join(dirname(pkgJson), 'out', wasmFile);
-  } catch {
-    // Fallback: try relative to node_modules
-    return join('node_modules', 'tree-sitter-wasms', 'out', wasmFile);
+    const candidate = join(dirname(pkgJson), 'out', wasmFile);
+    if (existsSync(candidate)) return candidate;
+  } catch { /* not found via createRequire */ }
+
+  // 2. Walk known locations relative to this file
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    // Relative to source file (dev mode: src/parsers/)
+    join(thisDir, '..', '..', 'node_modules', 'tree-sitter-wasms', 'out', wasmFile),
+    // Relative to dist (production: dist/)
+    join(thisDir, '..', 'node_modules', 'tree-sitter-wasms', 'out', wasmFile),
+    // Relative to cwd
+    join(process.cwd(), 'node_modules', 'tree-sitter-wasms', 'out', wasmFile),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
   }
+
+  return null;
 }
