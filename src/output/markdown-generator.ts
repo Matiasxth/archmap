@@ -26,6 +26,10 @@ export function generateMarkdown(result: ScanResult): string {
       ? `Parsing: **${p.pct}% AST** (all files parsed with tree-sitter)`
       : `Parsing: **${p.pct}% AST** (${p.ast} tree-sitter, ${p.regex} regex fallback)`;
     lines.push(`> ${label}`);
+    if (p.regexFiles && p.regexFiles.length > 0) {
+      lines.push('>');
+      lines.push(`> Regex fallback files: ${p.regexFiles.map((f) => `\`${f}\``).join(', ')}`);
+    }
   }
   lines.push('');
 

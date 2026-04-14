@@ -8,12 +8,13 @@ import { getChangedFiles, saveScanCache } from '../git/diff-tracker.js';
 import { loadManualRules } from '../analysis/manual-rules.js';
 import { computeHealthScore } from '../analysis/health-score.js';
 import { getVersion } from '../utils/version.js';
+import { SCHEMA_VERSION } from '../schema.js';
 import type { ScanResult, ScanOptions, ParseResult, ArchRule } from '../types.js';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 
-const SCHEMA_VERSION = 2;
+// SCHEMA_VERSION imported from ../schema.js
 
 /**
  * Main scanner orchestrator.
@@ -47,14 +48,14 @@ export async function scanProject(
     parseResults = await parseFiles(files);
   }
 
-  // 2b. Compute parsing stats
+  // 2b. Compute parsing stats (per-file tracking)
   const astCount = parseResults.filter((r) => r.parseMethod === 'ast').length;
-  const regexCount = parseResults.filter((r) => r.parseMethod === 'regex').length;
+  const regexFiles = parseResults.filter((r) => r.parseMethod === 'regex').map((r) => r.filePath);
+  const regexCount = regexFiles.length;
   const astPct = parseResults.length > 0 ? Math.round((astCount / parseResults.length) * 100) : 0;
 
   // 2c. Strict AST mode — fail if any file fell to regex
   if (options.strictAst && regexCount > 0) {
-    const regexFiles = parseResults.filter((r) => r.parseMethod === 'regex').map((r) => r.filePath);
     throw new Error(
       `--strict-ast: ${regexCount} file(s) parsed with regex fallback instead of AST:\n` +
       regexFiles.map((f) => `  - ${f}`).join('\n') +
@@ -142,7 +143,7 @@ export async function scanProject(
       totalObservations: allRules.filter((r) => r.tier === 'observation').length,
       totalConventions: allRules.filter((r) => r.tier === 'convention').length,
       totalStrongRules: allRules.filter((r) => r.tier === 'rule').length,
-      parsing: { ast: astCount, regex: regexCount, pct: astPct },
+      parsing: { ast: astCount, regex: regexCount, pct: astPct, regexFiles },
     },
     health,
     modules,

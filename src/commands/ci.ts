@@ -38,6 +38,12 @@ export async function ciCommand(options: CiOptions) {
     if (p.regex > 0) {
       if (!options.json) {
         console.log(chalk.yellow(`\n  ⚠ Parsing: ${p.pct}% AST (${p.regex} file(s) fell to regex fallback)`));
+        for (const f of p.regexFiles.slice(0, 10)) {
+          console.log(chalk.dim(`      - ${f}`));
+        }
+        if (p.regexFiles.length > 10) {
+          console.log(chalk.dim(`      ... and ${p.regexFiles.length - 10} more`));
+        }
       }
     }
 

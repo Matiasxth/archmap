@@ -165,7 +165,8 @@ export interface ScanResult {
     parsing: {
       ast: number;
       regex: number;
-      pct: number; // % parsed with AST (0-100)
+      pct: number;
+      regexFiles: string[]; // file paths that fell to regex fallback
     };
   };
   health: HealthScore;
