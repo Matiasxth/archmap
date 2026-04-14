@@ -1,4 +1,8 @@
 import { defineConfig } from 'tsup';
+import { readFileSync } from 'fs';
+
+const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
+const define = { 'globalThis.__ARCHMAP_VERSION__': JSON.stringify(pkg.version) };
 
 export default defineConfig([
   {
@@ -10,6 +14,7 @@ export default defineConfig([
     splitting: false,
     sourcemap: true,
     banner: { js: '#!/usr/bin/env node' },
+    define,
   },
   {
     entry: { index: 'src/index.ts' },
@@ -19,5 +24,6 @@ export default defineConfig([
     dts: true,
     splitting: false,
     sourcemap: true,
+    define,
   },
 ]);
