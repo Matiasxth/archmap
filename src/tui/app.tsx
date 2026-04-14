@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import SelectInput from 'ink-select-input';
-import type { ModuleInfo, ArchRule, ImplicitContract, DependencyGraph } from '../types.js';
+import type { ModuleInfo, ArchRule, ImplicitContract, DependencyGraph, HealthScore } from '../types.js';
 
 interface AppProps {
   modules: ModuleInfo[];
@@ -10,11 +10,13 @@ interface AppProps {
   dependencies: DependencyGraph;
   repoRoot: string;
   totalFiles: number;
+  health?: HealthScore;
+  parsing?: { ast: number; regex: number; pct: number };
 }
 
 type View = 'modules' | 'module-detail' | 'rules' | 'contracts' | 'deps';
 
-export function App({ modules, rules, contracts, dependencies, repoRoot, totalFiles }: AppProps) {
+export function App({ modules, rules, contracts, dependencies, repoRoot, totalFiles, health, parsing }: AppProps) {
   const [view, setView] = useState<View>('modules');
   const [selectedModule, setSelectedModule] = useState<ModuleInfo | null>(null);
   const { exit } = useApp();
@@ -29,7 +31,7 @@ export function App({ modules, rules, contracts, dependencies, repoRoot, totalFi
 
   return (
     <Box flexDirection="column" padding={1}>
-      <Header repoRoot={repoRoot} totalFiles={totalFiles} totalModules={modules.length} />
+      <Header repoRoot={repoRoot} totalFiles={totalFiles} totalModules={modules.length} health={health} parsing={parsing} />
 
       {view === 'modules' && (
         <ModulesView
@@ -60,11 +62,19 @@ export function App({ modules, rules, contracts, dependencies, repoRoot, totalFi
   );
 }
 
-function Header({ repoRoot, totalFiles, totalModules }: { repoRoot: string; totalFiles: number; totalModules: number }) {
+function Header({ repoRoot, totalFiles, totalModules, health, parsing }: {
+  repoRoot: string; totalFiles: number; totalModules: number;
+  health?: HealthScore; parsing?: { ast: number; regex: number; pct: number };
+}) {
+  const healthLabel = health ? ` | Health: ${health.overall}/100` : '';
+  const parsingLabel = parsing
+    ? ` | Parsing: ${parsing.pct}% AST${parsing.regex > 0 ? ` (${parsing.regex} regex)` : ''}`
+    : '';
+
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text bold color="cyan">{'  ◆ archmap'}</Text>
-      <Text dimColor>{`  ${repoRoot} — ${totalFiles} files, ${totalModules} modules`}</Text>
+      <Text dimColor>{`  ${repoRoot} — ${totalFiles} files, ${totalModules} modules${healthLabel}${parsingLabel}`}</Text>
     </Box>
   );
 }
@@ -162,27 +172,33 @@ function RulesView({ rules, onBack }: { rules: ArchRule[]; onBack: () => void })
     if (key.escape) onBack();
   });
 
-  const sorted = [...rules]
-    .filter((r) => r.confidence >= 0.75)
-    .sort((a, b) => b.confidence - a.confidence)
-    .slice(0, 20);
+  const tiers = ['rule', 'convention', 'observation'] as const;
+  const tierIcons = { rule: '!', convention: '~', observation: '.' };
+  const tierColors = { rule: 'red', convention: 'yellow', observation: 'gray' } as const;
+  const tierLabels = { rule: 'Rules (MUST)', convention: 'Conventions (SHOULD)', observation: 'Observations (INFO)' };
 
   return (
     <Box flexDirection="column">
-      <Text bold underline>{'  Architectural Rules'}</Text>
-      <Box marginTop={1} flexDirection="column">
-        {sorted.map((rule, i) => {
-          const pct = Math.round(rule.confidence * 100);
-          const color = pct >= 90 ? 'green' : pct >= 80 ? 'yellow' : 'red';
-          return (
-            <Box key={i} marginBottom={0}>
-              <Text color={color}>{`  [${String(pct).padStart(3)}%] `}</Text>
-              <Text>{rule.description}</Text>
+      {tiers.map((tier) => {
+        const tierRules = rules.filter((r) => r.tier === tier).sort((a, b) => b.confidence - a.confidence).slice(0, 10);
+        if (tierRules.length === 0) return null;
+        return (
+          <Box key={tier} flexDirection="column" marginBottom={1}>
+            <Text bold underline>{`  ${tierLabels[tier]} (${tierRules.length})`}</Text>
+            <Box marginTop={0} flexDirection="column">
+              {tierRules.map((rule, i) => {
+                const pct = Math.round(rule.confidence * 100);
+                return (
+                  <Box key={i} marginBottom={0}>
+                    <Text color={tierColors[tier]}>{`  ${tierIcons[tier]} [${String(pct).padStart(3)}%] `}</Text>
+                    <Text>{rule.description}</Text>
+                  </Box>
+                );
+              })}
             </Box>
-          );
-        })}
-        {sorted.length === 0 && <Text dimColor>{'  No high-confidence rules found.'}</Text>}
-      </Box>
+          </Box>
+        );
+      })}
     </Box>
   );
 }

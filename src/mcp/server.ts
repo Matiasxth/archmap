@@ -89,18 +89,45 @@ export function createMcpServer(root: string) {
     },
   );
 
-  // Tool: get_rules — list architectural rules
+  // Tool: get_rules — list architectural rules with tier filter
   server.tool(
     'get_rules',
-    'List inferred architectural rules (boundaries, naming conventions, etc.) sorted by confidence',
-    { min_confidence: z.number().optional().describe('Minimum confidence 0-1 (default: 0.7)') },
-    async ({ min_confidence }) => {
+    'List architectural rules sorted by confidence. Filter by tier (rule/convention/observation) and/or category (boundary/co-change/naming/layer).',
+    {
+      tier: z.enum(['rule', 'convention', 'observation']).optional().describe('Filter by tier'),
+      category: z.enum(['boundary', 'co-change', 'naming', 'layer', 'ownership']).optional().describe('Filter by category'),
+      min_confidence: z.number().optional().describe('Minimum confidence 0-1 (default: 0)'),
+    },
+    async ({ tier, category, min_confidence }) => {
       const data = await loadJson('rules.json');
-      const threshold = min_confidence ?? 0.7;
-      const filtered = data.rules
-        .filter((r: any) => r.confidence >= threshold)
-        .sort((a: any, b: any) => b.confidence - a.confidence);
+      let filtered = data.rules;
+      if (tier) filtered = filtered.filter((r: any) => r.tier === tier);
+      if (category) filtered = filtered.filter((r: any) => r.category === category);
+      if (min_confidence) filtered = filtered.filter((r: any) => r.confidence >= min_confidence);
+      filtered = filtered.sort((a: any, b: any) => b.confidence - a.confidence);
       return { content: [{ type: 'text' as const, text: JSON.stringify(filtered, null, 2) }] };
+    },
+  );
+
+  // Tool: get_health — project health score and breakdown
+  server.tool(
+    'get_health',
+    'Get project health score (0-100), tier breakdown, and per-module scores',
+    {},
+    async () => {
+      const manifest = await loadJson('manifest.json');
+      return { content: [{ type: 'text' as const, text: JSON.stringify(manifest.health, null, 2) }] };
+    },
+  );
+
+  // Tool: get_parsing_stats — AST vs regex breakdown
+  server.tool(
+    'get_parsing_stats',
+    'Get parsing statistics: how many files were parsed with AST (tree-sitter) vs regex fallback',
+    {},
+    async () => {
+      const manifest = await loadJson('manifest.json');
+      return { content: [{ type: 'text' as const, text: JSON.stringify(manifest.stats?.parsing ?? { ast: 0, regex: 0, pct: 0 }, null, 2) }] };
     },
   );
 

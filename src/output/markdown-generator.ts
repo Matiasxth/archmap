@@ -18,6 +18,15 @@ export function generateMarkdown(result: ScanResult): string {
     const emoji = h.overall >= 90 ? 'A+' : h.overall >= 80 ? 'A' : h.overall >= 70 ? 'B' : h.overall >= 60 ? 'C' : 'D';
     lines.push(`> Health: **${emoji}** (${h.overall}/100) | ${h.breakdown.rules.total} rules, ${h.breakdown.conventions.total} conventions, ${h.breakdown.observations.total} observations`);
   }
+
+  // Parsing stats
+  if (result.stats.parsing) {
+    const p = result.stats.parsing;
+    const label = p.pct === 100
+      ? `Parsing: **${p.pct}% AST** (all files parsed with tree-sitter)`
+      : `Parsing: **${p.pct}% AST** (${p.ast} tree-sitter, ${p.regex} regex fallback)`;
+    lines.push(`> ${label}`);
+  }
   lines.push('');
 
   // Module overview

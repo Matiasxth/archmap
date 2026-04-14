@@ -10,6 +10,7 @@ import { loadConfig } from '../utils/config.js';
 interface ScanOptions {
   root: string;
   gitHistory: boolean;
+  strictAst: boolean;
   verbose: boolean;
 }
 
@@ -23,6 +24,7 @@ export async function scanCommand(options: ScanOptions) {
     spinner.text = 'Analyzing files...';
     const result = await scanProject(root, {
       gitHistory: options.gitHistory,
+      strictAst: options.strictAst,
       verbose: options.verbose,
       config,
     });
@@ -39,7 +41,9 @@ export async function scanCommand(options: ScanOptions) {
       await integrateWithAgents(root, summary, config);
     }
 
-    spinner.succeed(chalk.green(`Scan complete — ${result.stats.totalFiles} files, ${result.stats.totalModules} modules`));
+    const p = result.stats.parsing;
+    const parsingInfo = p.pct === 100 ? '100% AST' : `${p.pct}% AST, ${p.regex} regex`;
+    spinner.succeed(chalk.green(`Scan complete — ${result.stats.totalFiles} files, ${result.stats.totalModules} modules, ${parsingInfo}`));
   } catch (error) {
     spinner.fail(chalk.red('Scan failed'));
     if (error instanceof Error) console.error(`  ${error.message}`);

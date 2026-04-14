@@ -32,6 +32,7 @@ program
   .description('Re-scan and update .archmap/')
   .option('-r, --root <path>', 'Root directory to scan', '.')
   .option('--no-git-history', 'Skip git history analysis')
+  .option('--strict-ast', 'Fail if any file falls back to regex parsing')
   .option('-v, --verbose', 'Verbose output')
   .action(scanCommand);
 

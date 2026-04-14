@@ -31,7 +31,7 @@ export async function showCommand(options: ShowOptions) {
     const contracts = JSON.parse(contractsRaw);
 
     if (options.json) {
-      console.log(JSON.stringify({ manifest, modules, dependencies: deps, rules, contracts }, null, 2));
+      console.log(JSON.stringify({ manifest, modules, dependencies: deps, rules, contracts, health: manifest.health, parsing: manifest.stats?.parsing }, null, 2));
       return;
     }
 
@@ -47,6 +47,8 @@ export async function showCommand(options: ShowOptions) {
         contracts: contracts.contracts,
         dependencies: deps.graph,
         repoRoot: manifest.repoRoot,
+        health: manifest.health,
+        parsing: manifest.stats?.parsing,
         totalFiles: manifest.stats.totalFiles,
       }),
     );
