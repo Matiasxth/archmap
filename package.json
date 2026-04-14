@@ -1,6 +1,6 @@
 {
   "name": "archmap",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Architecture-as-Code for AI Agents. Scan your codebase, generate machine-readable architecture maps.",
   "type": "module",
   "bin": {

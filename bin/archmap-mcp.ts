@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { resolve } from 'path';
 import { startMcpServer } from '../src/mcp/server.js';
 
