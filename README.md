@@ -227,21 +227,39 @@ Add to your project's `.mcp.json`:
 
 The `check_impact` tool is especially powerful — before modifying a file, the agent asks "what else might break?" and gets a precise answer.
 
+## Interactive TUI
+
+`archmap show` launches an interactive terminal UI:
+
+```bash
+npx archmap show
+```
+
+- Browse modules, their public APIs, and dependencies
+- View architectural rules sorted by confidence
+- Explore implicit contracts (co-change patterns)
+- See dependency layers and cross-module relationships
+- Navigate with arrow keys, Enter to drill in, Esc to go back, `q` to quit
+
+Use `--json` for machine-readable output instead.
+
 ## Supported languages
 
 - TypeScript / JavaScript (v0.1.0)
 - Python (v0.2.0)
-- Go (planned)
+- Go (v0.3.0)
 
 ## Roadmap
 
 - [x] Python parser
 - [x] MCP Server for real-time agent queries
 - [x] CI mode (`archmap ci` — fail if rules are violated)
-- [ ] Go parser
-- [ ] Incremental scanning (only re-parse changed files)
-- [ ] TUI visualization (`archmap show` with interactive graph)
+- [x] Go parser
+- [x] Incremental scanning (only re-parse changed files)
+- [x] TUI visualization (`archmap show` with interactive graph)
 - [ ] VS Code extension
+- [ ] Rust parser
+- [ ] Java parser
 
 ## License
 
