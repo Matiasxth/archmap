@@ -68,12 +68,15 @@ export async function scanProject(
     );
   }
 
-  // 3. Build project index + dependency graph
-  const projectIndex = buildProjectIndex(files, root);
-  const graph = buildDependencyGraph(parseResults, root, projectIndex);
+  // 3. Separate production from support code
+  const productionResults = parseResults.filter((r) => !r.isSupport);
 
-  // 4. Detect modules
-  const modules = detectModules(parseResults, graph, options.config);
+  // 4. Build project index + dependency graph (production only for architecture)
+  const projectIndex = buildProjectIndex(files.filter((f) => !f.isSupport), root);
+  const graph = buildDependencyGraph(productionResults, root, projectIndex);
+
+  // 5. Detect modules (production only)
+  const modules = detectModules(productionResults, graph, options.config);
 
   // 5. Infer layers
   const layers = inferLayers(modules);
@@ -106,35 +109,42 @@ export async function scanProject(
   } catch { /* no previous rules */ }
 
   // 8. Infer rules via multi-signal convergence
-  const inferredRules = await inferRules(modules, moduleGraph, parseResults, contracts, options.config, root, previousRules);
+  const inferredRules = await inferRules(modules, moduleGraph, productionResults, contracts, options.config, root, previousRules);
 
   // 9. Load manual rules
   const manualRules = await loadManualRules(root);
   const allRules = [...manualRules, ...inferredRules];
 
-  // 10. Compute health score
-  const health = computeHealthScore(allRules, modules);
-
-  // 11. File-level analysis: transitive impact, critical paths, risk scores
-  const fileGraph = buildDependencyGraph(parseResults, root, projectIndex);
+  // 10. File-level analysis (production graph for architecture, all for test mapping)
+  const fileGraph = buildDependencyGraph(productionResults, root, projectIndex);
   const transitiveImpact = computeTransitiveImpact(fileGraph);
   const fanInMap = computeFanIn(fileGraph);
   const criticalPaths = findCriticalPaths(fileGraph);
-
-  // Change frequency from git (empty if no history)
   const changeFreq = new Map<string, number>();
 
+  // Risk scores: compute for all files but force support files to low risk
   const fileRisks = computeFileRisks(parseResults, fileGraph, criticalPaths, transitiveImpact, fanInMap, changeFreq);
-  const hotFiles = computeHotFiles(fileRisks, modules);
+  for (const r of fileRisks) {
+    if (parseResults.find((p) => p.filePath === r.file)?.isSupport) {
+      r.risk = 'low';
+      r.score = 0;
+    }
+  }
+  const hotFiles = computeHotFiles(fileRisks.filter((r) => r.score > 0), modules);
 
-  // 12. Detect resource chains (cross-stack naming patterns)
-  const resourceChains = detectResourceChains(parseResults);
+  // 11. Detect resource chains (production files for chains)
+  const resourceChains = detectResourceChains(productionResults);
 
-  // 13. Generate insights (16 types, deduplicated)
+  // 12. Generate insights (16 types, deduplicated) — BEFORE health
+  const productionFileCount = productionResults.length;
   const insights = generateInsights({
-    fileRisks, criticalPaths, modules, graph: fileGraph,
-    resourceChains, contracts, totalFiles: files.length,
+    fileRisks: fileRisks.filter((r) => !parseResults.find((p) => p.filePath === r.file)?.isSupport),
+    criticalPaths, modules, graph: fileGraph,
+    resourceChains, contracts, totalFiles: productionFileCount,
   });
+
+  // 13. Compute health score (AFTER insights — uses insight penalties)
+  const health = computeHealthScore(allRules, modules, insights);
 
   // Collect unique languages
   const languages = [...new Set(files.map((f) => f.language))];

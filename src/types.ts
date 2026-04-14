@@ -25,6 +25,7 @@ export interface ParseResult {
   filePath: string;
   language: string;
   parseMethod: ParseMethod;
+  isSupport?: boolean;
   imports: ImportInfo[];
   exports: ExportInfo[];
 }

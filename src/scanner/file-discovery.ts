@@ -19,7 +19,27 @@ export interface DiscoveredFile {
   relativePath: string;
   language: string;
   extension: string;
+  isSupport: boolean;
 }
+
+const SUPPORT_PATTERNS = [
+  /(^|\/)tests?\//i,
+  /(^|\/)__tests__\//i,
+  /(^|\/)spec\//i,
+  /(^|\/)e2e\//i,
+  /(^|\/)docs?\//i,
+  /(^|\/)docs_src\//i,
+  /(^|\/)documentation\//i,
+  /(^|\/)examples?\//i,
+  /(^|\/)samples?\//i,
+  /(^|\/)benchmarks?\//i,
+  /(^|\/)bench\//i,
+  /(^|\/)fixtures?\//i,
+  /(^|\/)__fixtures__\//i,
+  /(^|\/)stories\//i,
+  /(^|\/)__stories__\//i,
+  /(^|\/)scripts?\//i,
+];
 
 export async function discoverFiles(
   root: string,
@@ -66,6 +86,7 @@ export async function discoverFiles(
       relativePath,
       language: detectLanguage(ext),
       extension: ext,
+      isSupport: SUPPORT_PATTERNS.some((p) => p.test(relativePath)),
     };
   });
 }

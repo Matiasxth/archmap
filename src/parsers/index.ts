@@ -36,8 +36,7 @@ export async function parseFile(file: DiscoveredFile): Promise<ParseResult | nul
     if (astParser) {
       try {
         const result = await astParser(content, file.relativePath);
-        // AST parser returns parseMethod:'ast' if tree-sitter worked,
-        // or parseMethod:'regex' if it internally fell back
+        result.isSupport = file.isSupport;
         return result;
       } catch {
         // Fall through to regex
@@ -49,6 +48,7 @@ export async function parseFile(file: DiscoveredFile): Promise<ParseResult | nul
     if (regexParser) {
       const result = regexParser(content, file.relativePath);
       result.parseMethod = 'regex';
+      result.isSupport = file.isSupport;
       return result;
     }
 

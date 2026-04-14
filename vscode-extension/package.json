@@ -2,7 +2,7 @@
   "name": "archmap-vscode",
   "displayName": "archmap — Architecture Map",
   "description": "Visualize your codebase architecture. See modules, dependencies, and architectural rules inline.",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "publisher": "matiasxth",
   "icon": "icon.png",
   "repository": {
