@@ -23,6 +23,7 @@ program
   .option('-r, --root <path>', 'Root directory to scan', '.')
   .option('--no-git-history', 'Skip git history analysis')
   .option('--no-agent-integration', 'Skip updating CLAUDE.md and similar files')
+  .option('--strict-ast', 'Fail if any file falls back to regex parsing')
   .option('-v, --verbose', 'Verbose output')
   .action(initCommand);
 

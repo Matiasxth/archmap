@@ -24,7 +24,7 @@ export async function parsePythonAST(content: string, filePath: string): Promise
     ? exports.filter((e) => explicitAll.includes(e.name))
     : exports;
 
-  return { filePath, language: 'python', imports, exports: finalExports };
+  return { filePath, language: 'python', parseMethod: 'ast' as const, imports, exports: finalExports };
 }
 
 function walkPythonNode(node: any, imports: ImportInfo[], exports: ExportInfo[]) {
@@ -284,5 +284,5 @@ export function parsePython(content: string, filePath: string): ParseResult {
     ? exports.filter((e) => explicitAll.includes(e.name))
     : exports;
 
-  return { filePath, language: 'python', imports, exports: finalExports };
+  return { filePath, language: 'python', parseMethod: 'regex' as const, imports, exports: finalExports };
 }

@@ -18,7 +18,7 @@ export async function parseTypeScriptAST(content: string, filePath: string): Pro
 
   walkNode(tree.rootNode, imports, exports);
 
-  return { filePath, language: 'typescript', imports, exports };
+  return { filePath, language: 'typescript', parseMethod: 'ast' as const, imports, exports };
 }
 
 function walkNode(node: any, imports: ImportInfo[], exports: ExportInfo[]) {
@@ -329,7 +329,7 @@ export function parseTypeScriptRegex(content: string, filePath: string): ParseRe
     }
   }
 
-  return { filePath, language: 'typescript', imports, exports };
+  return { filePath, language: 'typescript', parseMethod: 'regex' as const, imports, exports };
 }
 
 function extractSpecifiers(group1: string | undefined, group2: string | undefined): string[] {

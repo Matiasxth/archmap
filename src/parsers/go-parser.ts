@@ -90,7 +90,7 @@ export async function parseGoAST(content: string, filePath: string): Promise<Par
     }
   }
 
-  return { filePath, language: 'go', imports, exports };
+  return { filePath, language: 'go', parseMethod: 'ast' as const, imports, exports };
 }
 
 function extractGoImport(spec: any, imports: ImportInfo[], filePath: string) {
@@ -214,7 +214,7 @@ export function parseGo(content: string, filePath: string): ParseResult {
     }
   }
 
-  return { filePath, language: 'go', imports, exports };
+  return { filePath, language: 'go', parseMethod: 'regex' as const, imports, exports };
 }
 
 /**

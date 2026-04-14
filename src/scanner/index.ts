@@ -47,6 +47,21 @@ export async function scanProject(
     parseResults = await parseFiles(files);
   }
 
+  // 2b. Compute parsing stats
+  const astCount = parseResults.filter((r) => r.parseMethod === 'ast').length;
+  const regexCount = parseResults.filter((r) => r.parseMethod === 'regex').length;
+  const astPct = parseResults.length > 0 ? Math.round((astCount / parseResults.length) * 100) : 0;
+
+  // 2c. Strict AST mode — fail if any file fell to regex
+  if (options.strictAst && regexCount > 0) {
+    const regexFiles = parseResults.filter((r) => r.parseMethod === 'regex').map((r) => r.filePath);
+    throw new Error(
+      `--strict-ast: ${regexCount} file(s) parsed with regex fallback instead of AST:\n` +
+      regexFiles.map((f) => `  - ${f}`).join('\n') +
+      '\n\nEnsure tree-sitter-wasms is installed and WASM grammars are available.',
+    );
+  }
+
   // 3. Build dependency graph
   const graph = buildDependencyGraph(parseResults, root);
 
@@ -127,6 +142,7 @@ export async function scanProject(
       totalObservations: allRules.filter((r) => r.tier === 'observation').length,
       totalConventions: allRules.filter((r) => r.tier === 'convention').length,
       totalStrongRules: allRules.filter((r) => r.tier === 'rule').length,
+      parsing: { ast: astCount, regex: regexCount, pct: astPct },
     },
     health,
     modules,

@@ -46,7 +46,7 @@ export async function parseJavaAST(content: string, filePath: string): Promise<P
     extractJavaDeclaration(node, exports);
   }
 
-  return { filePath, language: 'java', imports, exports };
+  return { filePath, language: 'java', parseMethod: 'ast' as const, imports, exports };
 }
 
 function extractJavaDeclaration(node: any, exports: ExportInfo[]) {
@@ -205,7 +205,7 @@ export function parseJava(content: string, filePath: string): ParseResult {
     }
   }
 
-  return { filePath, language: 'java', imports, exports };
+  return { filePath, language: 'java', parseMethod: 'regex' as const, imports, exports };
 }
 
 /**

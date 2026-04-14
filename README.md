@@ -161,7 +161,7 @@ console.log(generateMarkdown(result)); // SUMMARY.md content
 
 ## Key principles
 
-- **Real AST parsing** — uses tree-sitter (WASM) for accurate parsing, not regex heuristics
+- **AST-first parsing** — uses tree-sitter (WASM) for accurate parsing, with regex fallback if grammars are unavailable. Output shows exactly which method was used per file.
 - **Fully offline** — your code never leaves your machine. No API keys. No network calls.
 - **Zero config** — works out of the box with `npx archmap init`
 - **Agent-agnostic** — works with Claude Code, Cursor, Codex, Aider, or any AI tool

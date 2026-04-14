@@ -22,9 +22,12 @@ export interface ArchmapConfig {
 
 // --- Parsing ---
 
+export type ParseMethod = 'ast' | 'regex';
+
 export interface ParseResult {
   filePath: string;
   language: string;
+  parseMethod: ParseMethod;
   imports: ImportInfo[];
   exports: ExportInfo[];
 }
@@ -162,6 +165,11 @@ export interface ScanResult {
     totalObservations: number;
     totalConventions: number;
     totalStrongRules: number;
+    parsing: {
+      ast: number;
+      regex: number;
+      pct: number; // % parsed with AST (0-100)
+    };
   };
   health: HealthScore;
   modules: ModuleInfo[];
@@ -174,5 +182,6 @@ export interface ScanResult {
 export interface ScanOptions {
   gitHistory: boolean;
   verbose: boolean;
+  strictAst?: boolean;
   config: ArchmapConfig;
 }

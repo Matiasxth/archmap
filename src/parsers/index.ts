@@ -7,7 +7,7 @@ import { parseJavaAST, parseJava } from './java-parser.js';
 import type { ParseResult } from '../types.js';
 import type { DiscoveredFile } from '../scanner/file-discovery.js';
 
-// AST parsers (async, tree-sitter) — preferred
+// AST parsers (async, tree-sitter)
 const AST_PARSERS: Record<string, (content: string, filePath: string) => Promise<ParseResult>> = {
   typescript: parseTypeScriptAST,
   javascript: parseTypeScriptAST,
@@ -35,16 +35,21 @@ export async function parseFile(file: DiscoveredFile): Promise<ParseResult | nul
     const astParser = AST_PARSERS[file.language];
     if (astParser) {
       try {
-        return await astParser(content, file.relativePath);
+        const result = await astParser(content, file.relativePath);
+        // AST parser returns parseMethod:'ast' if tree-sitter worked,
+        // or parseMethod:'regex' if it internally fell back
+        return result;
       } catch {
         // Fall through to regex
       }
     }
 
-    // Fallback to regex parser
+    // Explicit regex fallback
     const regexParser = REGEX_PARSERS[file.language];
     if (regexParser) {
-      return regexParser(content, file.relativePath);
+      const result = regexParser(content, file.relativePath);
+      result.parseMethod = 'regex';
+      return result;
     }
 
     return null;

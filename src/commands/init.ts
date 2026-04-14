@@ -11,6 +11,7 @@ interface InitOptions {
   root: string;
   gitHistory: boolean;
   agentIntegration: boolean;
+  strictAst: boolean;
   verbose: boolean;
 }
 
@@ -19,30 +20,26 @@ export async function initCommand(options: InitOptions) {
   const spinner = ora('Initializing archmap...').start();
 
   try {
-    // Create default config if it doesn't exist
     await createDefaultConfig(root);
     const config = await loadConfig(root);
 
-    // Run full scan
     spinner.text = 'Scanning project files...';
     const result = await scanProject(root, {
       gitHistory: options.gitHistory,
+      strictAst: options.strictAst,
       verbose: options.verbose,
       config,
     });
 
-    // Write .archmap/ output
     spinner.text = 'Writing .archmap/ directory...';
     await writeOutput(root, result);
 
-    // Generate SUMMARY.md
     spinner.text = 'Generating SUMMARY.md...';
     const summary = generateMarkdown(result);
     const { writeFile } = await import('fs/promises');
     const { join } = await import('path');
     await writeFile(join(root, '.archmap', 'SUMMARY.md'), summary, 'utf-8');
 
-    // Integrate with agent files
     if (options.agentIntegration) {
       spinner.text = 'Updating agent context files...';
       await integrateWithAgents(root, summary, config);
@@ -50,13 +47,20 @@ export async function initCommand(options: InitOptions) {
 
     spinner.succeed(chalk.green('archmap initialized successfully!'));
 
-    // Print summary stats
+    // Parsing stats
+    const p = result.stats.parsing;
+    const parsingColor = p.pct === 100 ? chalk.green : p.pct >= 80 ? chalk.yellow : chalk.red;
+    const parsingLabel = p.pct === 100
+      ? 'all AST'
+      : `${p.ast} AST, ${p.regex} regex fallback`;
+
     console.log('');
     console.log(`  ${chalk.bold('Files scanned:')}    ${result.stats.totalFiles}`);
+    console.log(`  ${chalk.bold('Parsing:')}          ${parsingColor(`${p.pct}% AST`)} (${parsingLabel})`);
     console.log(`  ${chalk.bold('Modules found:')}    ${result.stats.totalModules}`);
     console.log(`  ${chalk.bold('Dependencies:')}     ${result.stats.totalDependencies}`);
-    console.log(`  ${chalk.bold('Rules inferred:')}   ${result.stats.totalRules}`);
-    console.log(`  ${chalk.bold('Contracts found:')}  ${result.stats.totalContracts}`);
+    console.log(`  ${chalk.bold('Health:')}           ${result.health.overall}/100`);
+    console.log(`  ${chalk.bold('Rules:')}            ${result.stats.totalStrongRules} rules, ${result.stats.totalConventions} conventions, ${result.stats.totalObservations} observations`);
     console.log('');
     console.log(`  Output: ${chalk.cyan('.archmap/')}`);
     console.log(`  Summary: ${chalk.cyan('.archmap/SUMMARY.md')}`);

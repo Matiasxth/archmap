@@ -13,7 +13,7 @@ export async function parseRustAST(content: string, filePath: string): Promise<P
 
   walkRustNode(tree.rootNode, imports, exports);
 
-  return { filePath, language: 'rust', imports, exports };
+  return { filePath, language: 'rust', parseMethod: 'ast' as const, imports, exports };
 }
 
 function walkRustNode(node: any, imports: ImportInfo[], exports: ExportInfo[]) {
@@ -267,7 +267,7 @@ export function parseRust(content: string, filePath: string): ParseResult {
     }
   }
 
-  return { filePath, language: 'rust', imports, exports };
+  return { filePath, language: 'rust', parseMethod: 'regex' as const, imports, exports };
 }
 
 /**
