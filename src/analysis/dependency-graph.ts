@@ -22,7 +22,11 @@ export function buildDependencyGraph(
       if (imp.isRelative) {
         const resolved = result.language === 'python'
           ? resolvePythonImport(result.filePath, imp.source, fileSet)
-          : resolveRelativeImport(result.filePath, imp.source, root, fileSet);
+          : result.language === 'rust'
+            ? resolveRustImport(result.filePath, imp.source, fileSet)
+            : result.language === 'java'
+              ? resolveJavaImport(imp.source, fileSet)
+              : resolveRelativeImport(result.filePath, imp.source, root, fileSet);
         if (resolved) {
           const existing = edges.find(
             (e) => e.source === result.filePath && e.target === resolved,
@@ -164,6 +168,83 @@ function resolvePythonPath(
   // Try as a package: module/__init__.py
   const asPackage = join(fullPath, '__init__.py').replace(/\\/g, '/');
   if (fileSet.has(asPackage)) return asPackage;
+
+  return null;
+}
+
+/**
+ * Resolve a Rust import (crate::, self::, super::, or mod name) to a file.
+ */
+function resolveRustImport(
+  fromFile: string,
+  importSource: string,
+  fileSet: Set<string>,
+): string | null {
+  const dir = dirname(fromFile);
+
+  // mod declaration: look for mod_name.rs or mod_name/mod.rs
+  if (!importSource.includes('::')) {
+    const asFile = join(dir, importSource + '.rs').replace(/\\/g, '/');
+    if (fileSet.has(asFile)) return asFile;
+    const asMod = join(dir, importSource, 'mod.rs').replace(/\\/g, '/');
+    if (fileSet.has(asMod)) return asMod;
+    return null;
+  }
+
+  // crate:: paths: strip crate:: and convert :: to /
+  let path = importSource;
+  if (path.startsWith('crate::')) path = path.slice(7);
+  else if (path.startsWith('self::')) path = path.slice(6);
+  else if (path.startsWith('super::')) {
+    path = path.slice(7);
+    const parent = dirname(dir);
+    return resolveRustPath(parent, path, fileSet);
+  }
+
+  // Try from src/ root
+  return resolveRustPath('src', path, fileSet) ?? resolveRustPath('', path, fileSet);
+}
+
+function resolveRustPath(baseDir: string, modPath: string, fileSet: Set<string>): string | null {
+  const parts = modPath.split('::');
+  const filePath = baseDir ? join(baseDir, ...parts).replace(/\\/g, '/') : parts.join('/');
+
+  const asFile = filePath + '.rs';
+  if (fileSet.has(asFile)) return asFile;
+
+  const asMod = join(filePath, 'mod.rs').replace(/\\/g, '/');
+  if (fileSet.has(asMod)) return asMod;
+
+  // Try without the last part (it might be a symbol, not a module)
+  if (parts.length > 1) {
+    const parentPath = baseDir ? join(baseDir, ...parts.slice(0, -1)).replace(/\\/g, '/') : parts.slice(0, -1).join('/');
+    const parentFile = parentPath + '.rs';
+    if (fileSet.has(parentFile)) return parentFile;
+    const parentMod = join(parentPath, 'mod.rs').replace(/\\/g, '/');
+    if (fileSet.has(parentMod)) return parentMod;
+  }
+
+  return null;
+}
+
+/**
+ * Resolve a Java import (package path) to a file.
+ */
+function resolveJavaImport(
+  importSource: string,
+  fileSet: Set<string>,
+): string | null {
+  // Java: com.example.auth → com/example/auth.java or nested
+  const asPath = importSource.replace(/\./g, '/');
+
+  // Try as directory with files
+  for (const file of fileSet) {
+    if (file.replace(/\\/g, '/').includes(asPath)) return file;
+  }
+
+  // Try as a direct file
+  const asFile = asPath + '.java';
+  if (fileSet.has(asFile)) return asFile;
 
   return null;
 }

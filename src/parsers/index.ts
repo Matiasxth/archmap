@@ -2,6 +2,8 @@ import { readFile } from 'fs/promises';
 import { parseTypeScript } from './typescript-parser.js';
 import { parsePython } from './python-parser.js';
 import { parseGo } from './go-parser.js';
+import { parseRust } from './rust-parser.js';
+import { parseJava } from './java-parser.js';
 import type { ParseResult } from '../types.js';
 import type { DiscoveredFile } from '../scanner/file-discovery.js';
 
@@ -10,6 +12,8 @@ const PARSERS: Record<string, (content: string, filePath: string) => ParseResult
   javascript: parseTypeScript,
   python: parsePython,
   go: parseGo,
+  rust: parseRust,
+  java: parseJava,
 };
 
 export async function parseFile(file: DiscoveredFile): Promise<ParseResult | null> {

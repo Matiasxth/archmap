@@ -1,0 +1,78 @@
+{
+  "name": "archmap-vscode",
+  "displayName": "archmap — Architecture Map",
+  "description": "Visualize your codebase architecture. See modules, dependencies, and architectural rules inline.",
+  "version": "0.4.0",
+  "publisher": "matiasxth",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/matiasxth/archmap"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "architecture",
+    "ai",
+    "dependency",
+    "module",
+    "claude",
+    "codex"
+  ],
+  "activationEvents": [
+    "workspaceContains:.archmap/manifest.json"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "archmap.init",
+        "title": "archmap: Initialize (scan project)"
+      },
+      {
+        "command": "archmap.scan",
+        "title": "archmap: Re-scan project"
+      },
+      {
+        "command": "archmap.showModule",
+        "title": "archmap: Show module info"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "archmap",
+          "title": "archmap",
+          "icon": "$(symbol-structure)"
+        }
+      ]
+    },
+    "views": {
+      "archmap": [
+        {
+          "id": "archmap.modules",
+          "name": "Modules"
+        },
+        {
+          "id": "archmap.rules",
+          "name": "Rules"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "npm run build -- --watch",
+    "package": "npx vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.25.4",
+    "typescript": "^5.8.3"
+  }
+}

@@ -10,6 +10,8 @@ const LANGUAGE_EXTENSIONS: Record<string, string[]> = {
   javascript: ['.js', '.jsx', '.mjs', '.cjs'],
   python: ['.py'],
   go: ['.go'],
+  rust: ['.rs'],
+  java: ['.java'],
 };
 
 export interface DiscoveredFile {

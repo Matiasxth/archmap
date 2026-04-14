@@ -243,11 +243,25 @@ npx archmap show
 
 Use `--json` for machine-readable output instead.
 
+## VS Code Extension
+
+Install from the `vscode-extension/` directory or VS Code Marketplace:
+
+**Features:**
+- **Sidebar** — browse modules and their public APIs in the Activity Bar
+- **Rules panel** — view architectural rules sorted by confidence
+- **Status bar** — shows current module name, export count, and deps
+- **Hover info** — hover over imported symbols to see which module they come from
+- **Commands** — `archmap: Initialize` and `archmap: Re-scan` from the command palette
+- **Auto-refresh** — updates when `.archmap/*.json` files change
+
 ## Supported languages
 
 - TypeScript / JavaScript (v0.1.0)
 - Python (v0.2.0)
 - Go (v0.3.0)
+- Rust (v0.4.0)
+- Java (v0.4.0)
 
 ## Roadmap
 
@@ -257,9 +271,9 @@ Use `--json` for machine-readable output instead.
 - [x] Go parser
 - [x] Incremental scanning (only re-parse changed files)
 - [x] TUI visualization (`archmap show` with interactive graph)
-- [ ] VS Code extension
-- [ ] Rust parser
-- [ ] Java parser
+- [x] VS Code extension
+- [x] Rust parser
+- [x] Java parser
 
 ## License
 

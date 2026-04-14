@@ -9,7 +9,7 @@ const DEFAULT_CONFIG: ArchmapConfig = {
   include: [],
   moduleDetection: 'directory',
   moduleRoots: ['src', 'lib', 'app', 'packages'],
-  languages: ['typescript', 'javascript', 'python', 'go'],
+  languages: ['typescript', 'javascript', 'python', 'go', 'rust', 'java'],
   gitHistory: {
     maxCommits: 1000,
     minCoChangeConfidence: 0.7,
