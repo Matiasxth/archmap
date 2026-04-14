@@ -1,14 +1,20 @@
 import { dirname, join, resolve, relative, extname } from 'path';
 import { existsSync } from 'fs';
 import type { ParseResult, DependencyGraph, DependencyEdge } from '../types.js';
+import type { ProjectIndex } from './project-index.js';
 
 /**
  * Build a directed dependency graph from parsed import data.
- * Resolves relative imports to actual file paths.
+ *
+ * Three-step resolution (universal):
+ *   1. Try relative resolution (./  ../  .)
+ *   2. Try project index (absolute internal imports)
+ *   3. If neither → external
  */
 export function buildDependencyGraph(
   parseResults: ParseResult[],
   root: string,
+  projectIndex?: ProjectIndex,
 ): DependencyGraph {
   const fileSet = new Set(parseResults.map((r) => r.filePath));
   const edges: DependencyEdge[] = [];
@@ -19,46 +25,55 @@ export function buildDependencyGraph(
     nodeIds.add(result.filePath);
 
     for (const imp of result.imports) {
+      // Three-step universal resolution
+      let resolved: string | null = null;
+
+      // Step 1: Try relative resolution
       if (imp.isRelative) {
-        const resolved = result.language === 'python'
+        resolved = result.language === 'python'
           ? resolvePythonImport(result.filePath, imp.source, fileSet)
           : result.language === 'rust'
             ? resolveRustImport(result.filePath, imp.source, fileSet)
             : result.language === 'java'
               ? resolveJavaImport(imp.source, fileSet)
               : resolveRelativeImport(result.filePath, imp.source, root, fileSet);
-        if (resolved) {
-          const existing = edges.find(
-            (e) => e.source === result.filePath && e.target === resolved,
-          );
-          if (existing) {
-            existing.weight++;
-            existing.references.push({
-              file: result.filePath,
-              line: imp.line,
-              symbol: imp.specifiers[0] ?? '*',
-            });
-          } else {
-            edges.push({
-              source: result.filePath,
-              target: resolved,
-              type: imp.isDynamic ? 'dynamic' : 'import',
-              weight: 1,
-              references: [
-                {
-                  file: result.filePath,
-                  line: imp.line,
-                  symbol: imp.specifiers[0] ?? '*',
-                },
-              ],
-            });
-          }
-          nodeIds.add(resolved);
+      }
+
+      // Step 2: Try project index (absolute internal imports)
+      if (!resolved && !imp.isRelative && projectIndex) {
+        resolved = projectIndex.resolve(imp.source, result.language, result.filePath);
+      }
+
+      // Step 3: Add edge if resolved, otherwise external
+      if (resolved) {
+        const existing = edges.find(
+          (e) => e.source === result.filePath && e.target === resolved,
+        );
+        if (existing) {
+          existing.weight++;
+          existing.references.push({
+            file: result.filePath,
+            line: imp.line,
+            symbol: imp.specifiers[0] ?? '*',
+          });
+        } else {
+          edges.push({
+            source: result.filePath,
+            target: resolved,
+            type: imp.isDynamic ? 'dynamic' : 'import',
+            weight: 1,
+            references: [
+              {
+                file: result.filePath,
+                line: imp.line,
+                symbol: imp.specifiers[0] ?? '*',
+              },
+            ],
+          });
         }
-      } else {
-        // External dependency
-        const pkgName = getPackageName(imp.source);
-        externalDeps.add(pkgName);
+        nodeIds.add(resolved);
+      } else if (!imp.isRelative) {
+        externalDeps.add(getPackageName(imp.source));
       }
     }
   }

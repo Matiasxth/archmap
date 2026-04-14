@@ -10,6 +10,7 @@ import { computeHealthScore } from '../analysis/health-score.js';
 import { computeTransitiveImpact, findCriticalPaths, computeFanIn } from '../analysis/transitive-impact.js';
 import { computeFileRisks, computeHotFiles } from '../analysis/file-risk.js';
 import { detectResourceChains } from '../analysis/resource-chains.js';
+import { buildProjectIndex } from '../analysis/project-index.js';
 import { getVersion } from '../utils/version.js';
 import { SCHEMA_VERSION } from '../schema.js';
 import type { ScanResult, ScanOptions, ParseResult, ArchRule } from '../types.js';
@@ -66,8 +67,9 @@ export async function scanProject(
     );
   }
 
-  // 3. Build dependency graph
-  const graph = buildDependencyGraph(parseResults, root);
+  // 3. Build project index + dependency graph
+  const projectIndex = buildProjectIndex(files, root);
+  const graph = buildDependencyGraph(parseResults, root, projectIndex);
 
   // 4. Detect modules
   const modules = detectModules(parseResults, graph, options.config);
@@ -113,7 +115,7 @@ export async function scanProject(
   const health = computeHealthScore(allRules, modules);
 
   // 11. File-level analysis: transitive impact, critical paths, risk scores
-  const fileGraph = buildDependencyGraph(parseResults, root);
+  const fileGraph = buildDependencyGraph(parseResults, root, projectIndex);
   const transitiveImpact = computeTransitiveImpact(fileGraph);
   const fanInMap = computeFanIn(fileGraph);
   const criticalPaths = findCriticalPaths(fileGraph);
