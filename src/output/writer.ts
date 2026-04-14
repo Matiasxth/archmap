@@ -48,6 +48,7 @@ export async function writeOutput(root: string, result: ScanResult): Promise<voi
     criticalPaths: result.criticalPaths,
     hotFiles: result.hotFiles,
     resourceChains: result.resourceChains,
+    insights: result.insights,
   });
 }
 

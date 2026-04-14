@@ -11,6 +11,7 @@ import { computeTransitiveImpact, findCriticalPaths, computeFanIn } from '../ana
 import { computeFileRisks, computeHotFiles } from '../analysis/file-risk.js';
 import { detectResourceChains } from '../analysis/resource-chains.js';
 import { buildProjectIndex } from '../analysis/project-index.js';
+import { generateInsights } from '../analysis/insights.js';
 import { getVersion } from '../utils/version.js';
 import { SCHEMA_VERSION } from '../schema.js';
 import type { ScanResult, ScanOptions, ParseResult, ArchRule } from '../types.js';
@@ -129,6 +130,12 @@ export async function scanProject(
   // 12. Detect resource chains (cross-stack naming patterns)
   const resourceChains = detectResourceChains(parseResults);
 
+  // 13. Generate insights (16 types, deduplicated)
+  const insights = generateInsights({
+    fileRisks, criticalPaths, modules, graph: fileGraph,
+    resourceChains, contracts, totalFiles: files.length,
+  });
+
   // Collect unique languages
   const languages = [...new Set(files.map((f) => f.language))];
 
@@ -180,5 +187,6 @@ export async function scanProject(
     criticalPaths,
     hotFiles,
     resourceChains,
+    insights,
   };
 }

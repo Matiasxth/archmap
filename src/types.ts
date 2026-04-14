@@ -233,6 +233,15 @@ export interface ScanResult {
   criticalPaths: CriticalPath[];
   hotFiles: HotFile[];
   resourceChains: ResourceChain[];
+  insights: Array<{
+    severity: 'info' | 'warning' | 'critical';
+    id: string;
+    file?: string;
+    module?: string;
+    metric: string;
+    description: string;
+    action: string;
+  }>;
 }
 
 export interface ScanOptions {

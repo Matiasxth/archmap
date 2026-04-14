@@ -97,13 +97,20 @@ export function generateMarkdown(result: ScanResult): string {
     lines.push('');
   }
 
-  // Conventions (top 15)
-  const conventions = result.rules.filter((r) => r.tier === 'convention').sort((a, b) => b.confidence - a.confidence).slice(0, 15);
-  if (conventions.length > 0) {
-    lines.push('## Conventions (SHOULD follow)');
+  // Insights (budget: all critical, top 10 warning, top 5 info)
+  const insights = result.insights ?? [];
+  const criticalInsights = insights.filter((i) => i.severity === 'critical');
+  const warningInsights = insights.filter((i) => i.severity === 'warning').slice(0, 10);
+  const infoInsights = insights.filter((i) => i.severity === 'info').slice(0, 5);
+  const budgetedInsights = [...criticalInsights, ...warningInsights, ...infoInsights];
+
+  if (budgetedInsights.length > 0) {
+    lines.push('## Insights');
     lines.push('');
-    for (const rule of conventions) {
-      lines.push(`- [${Math.round(rule.confidence * 100)}%] ${rule.description}`);
+    for (const insight of budgetedInsights) {
+      const icon = insight.severity === 'critical' ? '!!!' : insight.severity === 'warning' ? '!!' : '!';
+      lines.push(`- **[${icon}]** ${insight.description}`);
+      lines.push(`  - ${insight.action}`);
     }
     lines.push('');
   }
