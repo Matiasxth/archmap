@@ -1,4 +1,106 @@
 import type { ParseResult, ImportInfo, ExportInfo } from '../types.js';
+import { parseToTree } from './tree-sitter-pool.js';
+
+/**
+ * AST-based Rust parser using tree-sitter.
+ */
+export async function parseRustAST(content: string, filePath: string): Promise<ParseResult> {
+  const tree = await parseToTree(content, 'rust');
+  if (!tree) return parseRust(content, filePath);
+
+  const imports: ImportInfo[] = [];
+  const exports: ExportInfo[] = [];
+
+  walkRustNode(tree.rootNode, imports, exports);
+
+  return { filePath, language: 'rust', imports, exports };
+}
+
+function walkRustNode(node: any, imports: ImportInfo[], exports: ExportInfo[]) {
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i);
+
+    if (child.type === 'use_declaration') {
+      extractRustUse(child, imports);
+    } else if (child.type === 'mod_item') {
+      // mod name; (external module)
+      const nameNode = child.children.find((c: any) => c.type === 'identifier');
+      const hasBraces = child.children.some((c: any) => c.type === 'declaration_list');
+      if (nameNode && !hasBraces) {
+        imports.push({
+          source: nameNode.text,
+          specifiers: [nameNode.text],
+          isRelative: true,
+          isDynamic: false,
+          line: child.startPosition.row + 1,
+        });
+      }
+    }
+
+    // Exports: items with visibility_modifier (pub)
+    const hasPub = child.children?.some((c: any) => c.type === 'visibility_modifier');
+    if (hasPub) {
+      const line = child.startPosition.row + 1;
+
+      if (child.type === 'function_item') {
+        const name = child.children.find((c: any) => c.type === 'identifier');
+        if (name) exports.push({ name: name.text, type: 'function', line });
+      } else if (child.type === 'struct_item') {
+        const name = child.children.find((c: any) => c.type === 'type_identifier');
+        if (name) exports.push({ name: name.text, type: 'class', line });
+      } else if (child.type === 'enum_item') {
+        const name = child.children.find((c: any) => c.type === 'type_identifier');
+        if (name) exports.push({ name: name.text, type: 'type', line });
+      } else if (child.type === 'trait_item') {
+        const name = child.children.find((c: any) => c.type === 'type_identifier');
+        if (name) exports.push({ name: name.text, type: 'interface', line });
+      } else if (child.type === 'type_item') {
+        const name = child.children.find((c: any) => c.type === 'type_identifier');
+        if (name) exports.push({ name: name.text, type: 'type', line });
+      } else if (child.type === 'const_item' || child.type === 'static_item') {
+        const name = child.children.find((c: any) => c.type === 'identifier');
+        if (name) exports.push({ name: name.text, type: 'constant', line });
+      }
+    }
+  }
+}
+
+function extractRustUse(node: any, imports: ImportInfo[]) {
+  // Collect the full use path text
+  const text = node.text;
+  const line = node.startPosition.row + 1;
+
+  // use path::to::item;
+  const simpleMatch = text.match(/use\s+([\w:]+(?:::\*)?)\s*(?:as\s+(\w+))?;/);
+  if (simpleMatch && !text.includes('{')) {
+    const source = simpleMatch[1];
+    const alias = simpleMatch[2];
+    imports.push({
+      source,
+      specifiers: [alias ?? source.split('::').pop()!],
+      isRelative: isRelativeRustImport(source),
+      isDynamic: false,
+      line,
+    });
+    return;
+  }
+
+  // use path::{A, B, C};
+  const blockMatch = text.match(/use\s+([\w:]+)::\{([^}]+)\}/s);
+  if (blockMatch) {
+    const base = blockMatch[1];
+    const items = blockMatch[2].split(',').map((s: string) => s.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
+    for (const item of items) {
+      imports.push({
+        source: `${base}::${item}`,
+        specifiers: [item.split('::').pop()!],
+        isRelative: isRelativeRustImport(base),
+        isDynamic: false,
+        line,
+      });
+    }
+  }
+}
 
 /**
  * Regex-based Rust parser.

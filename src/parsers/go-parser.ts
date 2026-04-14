@@ -1,4 +1,118 @@
 import type { ParseResult, ImportInfo, ExportInfo } from '../types.js';
+import { parseToTree } from './tree-sitter-pool.js';
+
+/**
+ * AST-based Go parser using tree-sitter.
+ */
+export async function parseGoAST(content: string, filePath: string): Promise<ParseResult> {
+  const tree = await parseToTree(content, 'go');
+  if (!tree) return parseGo(content, filePath);
+
+  const imports: ImportInfo[] = [];
+  const exports: ExportInfo[] = [];
+
+  for (let i = 0; i < tree.rootNode.childCount; i++) {
+    const node = tree.rootNode.child(i);
+
+    if (node.type === 'import_declaration') {
+      // Single or block import
+      for (let j = 0; j < node.childCount; j++) {
+        const child = node.child(j);
+        if (child.type === 'import_spec_list') {
+          for (let k = 0; k < child.childCount; k++) {
+            const spec = child.child(k);
+            if (spec.type === 'import_spec') {
+              extractGoImport(spec, imports, filePath);
+            }
+          }
+        } else if (child.type === 'import_spec') {
+          extractGoImport(child, imports, filePath);
+        } else if (child.type === 'interpreted_string_literal') {
+          const source = stripGoQuotes(child.text);
+          imports.push({
+            source,
+            specifiers: [source.split('/').pop()!],
+            isRelative: isRelativeGoImport(source, filePath),
+            isDynamic: false,
+            line: child.startPosition.row + 1,
+          });
+        }
+      }
+    }
+
+    if (node.type === 'function_declaration') {
+      const nameNode = node.children.find((c: any) => c.type === 'identifier');
+      if (nameNode && /^[A-Z]/.test(nameNode.text)) {
+        exports.push({ name: nameNode.text, type: 'function', line: node.startPosition.row + 1 });
+      }
+    }
+
+    if (node.type === 'method_declaration') {
+      const nameNode = node.children.find((c: any) => c.type === 'field_identifier');
+      if (nameNode && /^[A-Z]/.test(nameNode.text)) {
+        exports.push({ name: nameNode.text, type: 'function', line: node.startPosition.row + 1 });
+      }
+    }
+
+    if (node.type === 'type_declaration') {
+      for (let j = 0; j < node.childCount; j++) {
+        const spec = node.child(j);
+        if (spec.type === 'type_spec') {
+          const nameNode = spec.children.find((c: any) => c.type === 'type_identifier');
+          if (nameNode && /^[A-Z]/.test(nameNode.text)) {
+            const hasInterface = spec.children.some((c: any) => c.type === 'interface_type');
+            const hasStruct = spec.children.some((c: any) => c.type === 'struct_type');
+            const type = hasInterface ? 'interface' : hasStruct ? 'class' : 'type';
+            exports.push({ name: nameNode.text, type, line: spec.startPosition.row + 1 });
+          }
+        }
+      }
+    }
+
+    if (node.type === 'const_declaration' || node.type === 'var_declaration') {
+      for (let j = 0; j < node.childCount; j++) {
+        const child = node.child(j);
+        const specs = child.type === 'const_spec' || child.type === 'var_spec' ? [child] : [];
+        if (child.type === 'const_spec_list' || child.type === 'var_spec_list') {
+          for (let k = 0; k < child.childCount; k++) {
+            if (child.child(k).type === 'const_spec' || child.child(k).type === 'var_spec') {
+              specs.push(child.child(k));
+            }
+          }
+        }
+        for (const spec of specs) {
+          const nameNode = spec.children.find((c: any) => c.type === 'identifier');
+          if (nameNode && /^[A-Z]/.test(nameNode.text)) {
+            exports.push({ name: nameNode.text, type: 'constant', line: spec.startPosition.row + 1 });
+          }
+        }
+      }
+    }
+  }
+
+  return { filePath, language: 'go', imports, exports };
+}
+
+function extractGoImport(spec: any, imports: ImportInfo[], filePath: string) {
+  const strNode = spec.children.find((c: any) => c.type === 'interpreted_string_literal');
+  if (!strNode) return;
+
+  const source = stripGoQuotes(strNode.text);
+  const aliasNode = spec.children.find((c: any) => c.type === 'package_identifier' || c.type === 'identifier');
+  const alias = aliasNode?.text;
+
+  imports.push({
+    source,
+    specifiers: alias ? [alias] : [source.split('/').pop()!],
+    isRelative: isRelativeGoImport(source, filePath),
+    isDynamic: false,
+    line: spec.startPosition.row + 1,
+  });
+}
+
+function stripGoQuotes(s: string): string {
+  return s.replace(/^"|"$/g, '');
+}
 
 /**
  * Regex-based Go parser.

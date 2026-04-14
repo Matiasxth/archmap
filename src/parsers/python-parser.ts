@@ -1,4 +1,121 @@
 import type { ParseResult, ImportInfo, ExportInfo } from '../types.js';
+import { parseToTree } from './tree-sitter-pool.js';
+
+/**
+ * AST-based Python parser using tree-sitter.
+ * Falls back to regex if tree-sitter is unavailable.
+ */
+export async function parsePythonAST(content: string, filePath: string): Promise<ParseResult> {
+  const tree = await parseToTree(content, 'python');
+  if (!tree) return parsePython(content, filePath);
+
+  const imports: ImportInfo[] = [];
+  const exports: ExportInfo[] = [];
+
+  // Check for __all__
+  const allMatch = content.match(/__all__\s*=\s*\[([^\]]*)\]/s);
+  const explicitAll = allMatch
+    ? allMatch[1].split(',').map((s) => s.trim().replace(/['"]/g, '')).filter(Boolean)
+    : null;
+
+  walkPythonNode(tree.rootNode, imports, exports);
+
+  const finalExports = explicitAll
+    ? exports.filter((e) => explicitAll.includes(e.name))
+    : exports;
+
+  return { filePath, language: 'python', imports, exports: finalExports };
+}
+
+function walkPythonNode(node: any, imports: ImportInfo[], exports: ExportInfo[]) {
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i);
+
+    switch (child.type) {
+      case 'import_statement': {
+        // import x, import x as y
+        for (let j = 0; j < child.childCount; j++) {
+          const n = child.child(j);
+          if (n.type === 'dotted_name' || n.type === 'aliased_import') {
+            const name = n.type === 'aliased_import'
+              ? n.children.find((c: any) => c.type === 'dotted_name')
+              : n;
+            if (name) {
+              imports.push({
+                source: name.text,
+                specifiers: [name.text.split('.').pop()!],
+                isRelative: false,
+                isDynamic: false,
+                line: child.startPosition.row + 1,
+              });
+            }
+          }
+        }
+        break;
+      }
+
+      case 'import_from_statement': {
+        // from x import y, z
+        const moduleNode = child.children.find((c: any) => c.type === 'dotted_name' || c.type === 'relative_import');
+        const source = moduleNode?.text ?? '.';
+        const specifiers: string[] = [];
+
+        for (let j = 0; j < child.childCount; j++) {
+          const n = child.child(j);
+          if (n.type === 'dotted_name' && n !== moduleNode) {
+            specifiers.push(n.text);
+          } else if (n.type === 'aliased_import') {
+            const nameNode = n.children.find((c: any) => c.type === 'dotted_name' || c.type === 'identifier');
+            if (nameNode) specifiers.push(nameNode.text);
+          } else if (n.type === 'identifier' && n.text !== 'from' && n.text !== 'import') {
+            specifiers.push(n.text);
+          } else if (n.type === 'wildcard_import') {
+            specifiers.push('*');
+          }
+        }
+
+        imports.push({
+          source,
+          specifiers,
+          isRelative: source.startsWith('.'),
+          isDynamic: false,
+          line: child.startPosition.row + 1,
+        });
+        break;
+      }
+
+      case 'function_definition': {
+        const nameNode = child.children.find((c: any) => c.type === 'identifier');
+        if (nameNode && !nameNode.text.startsWith('_')) {
+          exports.push({ name: nameNode.text, type: 'function', line: child.startPosition.row + 1 });
+        }
+        break;
+      }
+
+      case 'class_definition': {
+        const nameNode = child.children.find((c: any) => c.type === 'identifier');
+        if (nameNode && !nameNode.text.startsWith('_')) {
+          exports.push({ name: nameNode.text, type: 'class', line: child.startPosition.row + 1 });
+        }
+        break;
+      }
+
+      case 'expression_statement': {
+        // Top-level assignments: NAME = ...
+        const assignment = child.children.find((c: any) => c.type === 'assignment');
+        if (assignment) {
+          const left = assignment.child(0);
+          if (left?.type === 'identifier' && !left.text.startsWith('_')) {
+            const name = left.text;
+            const type = /^[A-Z][A-Z_0-9]+$/.test(name) ? 'constant' as const : 'constant' as const;
+            exports.push({ name, type, line: child.startPosition.row + 1 });
+          }
+        }
+        break;
+      }
+    }
+  }
+}
 
 /**
  * Regex-based Python parser.
