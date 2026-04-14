@@ -6,8 +6,6 @@ import type { ArchmapConfig } from '../types.js';
 const DEFAULT_CONFIG: ArchmapConfig = {
   version: 1,
   exclude: ['node_modules', 'dist', 'build', '.git', 'vendor', '__pycache__', '.venv', 'coverage'],
-  include: [],
-  moduleDetection: 'directory',
   moduleRoots: ['src', 'lib', 'app', 'packages'],
   languages: ['typescript', 'javascript', 'python', 'go', 'rust', 'java'],
   gitHistory: {
@@ -18,7 +16,6 @@ const DEFAULT_CONFIG: ArchmapConfig = {
   agentIntegration: {
     updateClaudeMd: true,
     updateCursorRules: false,
-    summaryPath: '.archmap/SUMMARY.md',
   },
   ruleOverrides: {},
 };

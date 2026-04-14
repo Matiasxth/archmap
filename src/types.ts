@@ -3,19 +3,16 @@
 export interface ArchmapConfig {
   version: number;
   exclude: string[];
-  include: string[];
-  moduleDetection: 'directory' | 'package';
   moduleRoots: string[];
   languages: string[];
   gitHistory: {
     maxCommits: number;
     minCoChangeConfidence: number;
-    trendWindow: number; // last N commits for trend calculation
+    trendWindow: number;
   };
   agentIntegration: {
     updateClaudeMd: boolean;
     updateCursorRules: boolean;
-    summaryPath: string;
   };
   ruleOverrides: Record<string, 'suppress' | 'promote:rule' | 'promote:convention'>;
 }

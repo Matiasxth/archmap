@@ -2,6 +2,30 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 
+// --- Schema v2 Types ---
+
+interface RuleEvidence {
+  firstSeen: string;
+  commitsSampled: number;
+  recentViolations: number;
+  totalInstances: number;
+  matchingInstances: number;
+  details?: Record<string, unknown>;
+}
+
+interface ArchRule {
+  id: string;
+  category: 'boundary' | 'co-change' | 'naming' | 'layer' | 'ownership';
+  tier: 'observation' | 'convention' | 'rule';
+  confidence: number;
+  trend: 'stable' | 'strengthening' | 'weakening' | 'broken' | 'new';
+  scope: string[];
+  description: string;
+  action: string;
+  source: 'git-history' | 'static-analysis' | 'manual';
+  evidence: RuleEvidence;
+}
+
 interface ModuleInfo {
   id: string;
   name: string;
@@ -13,67 +37,65 @@ interface ModuleInfo {
   externalDependencies: string[];
 }
 
-interface ArchRule {
-  id: string;
-  type: string;
-  confidence: number;
-  description: string;
+interface HealthScore {
+  overall: number;
+  trend: string;
+  breakdown: {
+    observations: { total: number };
+    conventions: { total: number; violations: number };
+    rules: { total: number; violations: number };
+  };
+  moduleScores: Array<{ moduleId: string; score: number; violations: number }>;
 }
 
 interface ArchmapData {
+  schemaVersion?: number;
   modules: ModuleInfo[];
   rules: ArchRule[];
-  manifest: any;
+  health?: HealthScore;
+  parsing?: { ast: number; regex: number; pct: number };
 }
 
+const OUTPUT = vscode.window.createOutputChannel('archmap');
 let archmapData: ArchmapData | null = null;
 let statusBarItem: vscode.StatusBarItem;
 
 export function activate(context: vscode.ExtensionContext) {
-  // Status bar
+  OUTPUT.appendLine('archmap extension activated');
+
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusBarItem.command = 'archmap.showModule';
   context.subscriptions.push(statusBarItem);
 
-  // Load data
   loadArchmapData();
 
-  // Commands
   context.subscriptions.push(
     vscode.commands.registerCommand('archmap.init', runInit),
     vscode.commands.registerCommand('archmap.scan', runScan),
     vscode.commands.registerCommand('archmap.showModule', showModuleQuickPick),
   );
 
-  // Tree views
   const modulesProvider = new ModulesTreeProvider();
   const rulesProvider = new RulesTreeProvider();
   vscode.window.registerTreeDataProvider('archmap.modules', modulesProvider);
   vscode.window.registerTreeDataProvider('archmap.rules', rulesProvider);
 
-  // Update on file save
   vscode.workspace.onDidSaveTextDocument(() => {
     loadArchmapData();
     modulesProvider.refresh();
     rulesProvider.refresh();
   });
 
-  // Update status bar on editor change
-  vscode.window.onDidChangeActiveTextEditor((editor) => {
-    updateStatusBar(editor);
-  });
+  vscode.window.onDidChangeActiveTextEditor(updateStatusBar);
 
-  // Hover provider — show module info on hover over imports
   const hoverProvider = vscode.languages.registerHoverProvider(
     ['typescript', 'javascript', 'python', 'go', 'rust', 'java'],
     { provideHover: provideModuleHover },
   );
   context.subscriptions.push(hoverProvider);
 
-  // Initial status bar update
   updateStatusBar(vscode.window.activeTextEditor);
 
-  // File watcher for .archmap changes
   const watcher = vscode.workspace.createFileSystemWatcher('**/.archmap/*.json');
   watcher.onDidChange(() => {
     loadArchmapData();
@@ -99,11 +121,28 @@ function loadArchmapData() {
   }
 
   try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(archmapDir, 'manifest.json'), 'utf-8'));
     const modules = JSON.parse(fs.readFileSync(path.join(archmapDir, 'modules.json'), 'utf-8'));
     const rules = JSON.parse(fs.readFileSync(path.join(archmapDir, 'rules.json'), 'utf-8'));
-    const manifest = JSON.parse(fs.readFileSync(path.join(archmapDir, 'manifest.json'), 'utf-8'));
-    archmapData = { modules: modules.modules, rules: rules.rules, manifest };
-  } catch {
+
+    // Schema version check
+    const schemaVersion = rules.schemaVersion ?? manifest.schemaVersion ?? 1;
+    if (schemaVersion < 2) {
+      OUTPUT.appendLine(`Warning: .archmap/ uses schema v${schemaVersion}. Run \`archmap scan\` to upgrade to v2.`);
+    }
+
+    archmapData = {
+      schemaVersion,
+      modules: modules.modules,
+      rules: rules.rules,
+      health: manifest.health,
+      parsing: manifest.stats?.parsing,
+    };
+
+    OUTPUT.appendLine(`Loaded .archmap/: ${archmapData.modules.length} modules, ${archmapData.rules.length} rules, schema v${schemaVersion}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    OUTPUT.appendLine(`Failed to load .archmap/: ${msg}`);
     archmapData = null;
   }
 }
@@ -125,10 +164,13 @@ function updateStatusBar(editor: vscode.TextEditor | undefined) {
 
   const mod = findModuleForFile(editor.document.uri.fsPath);
   if (mod) {
-    const deps = mod.internalDependencies.length;
-    const exports = mod.publicApi.exports.length;
-    statusBarItem.text = `$(symbol-structure) ${mod.name} (${exports} exports, ${deps} deps)`;
-    statusBarItem.tooltip = `Module: ${mod.id}\nLanguage: ${mod.language}\nFiles: ${mod.files.length}\nDeps: ${mod.internalDependencies.join(', ') || 'none'}`;
+    const healthLabel = archmapData.health ? ` | H:${archmapData.health.overall}` : '';
+    statusBarItem.text = `$(symbol-structure) ${mod.name} (${mod.publicApi.exports.length} exp, ${mod.internalDependencies.length} dep)${healthLabel}`;
+
+    const modHealth = archmapData.health?.moduleScores.find((ms) => ms.moduleId === mod.id);
+    const healthTip = modHealth ? `\nModule health: ${modHealth.score}/100 (${modHealth.violations} violations)` : '';
+    const parsingTip = archmapData.parsing ? `\nParsing: ${archmapData.parsing.pct}% AST` : '';
+    statusBarItem.tooltip = `Module: ${mod.id}\nLanguage: ${mod.language}\nFiles: ${mod.files.length}\nDeps: ${mod.internalDependencies.join(', ') || 'none'}${healthTip}${parsingTip}`;
     statusBarItem.show();
   } else {
     statusBarItem.hide();
@@ -148,7 +190,6 @@ function provideModuleHover(
   if (!wordRange) return undefined;
   const word = document.getText(wordRange);
 
-  // Check if hovering over an exported symbol from another module
   for (const m of archmapData.modules) {
     const exp = m.publicApi.exports.find((e) => e.name === word);
     if (exp && m.id !== mod.id) {
@@ -168,11 +209,7 @@ function provideModuleHover(
 
 async function runInit() {
   const root = getWorkspaceRoot();
-  if (!root) {
-    vscode.window.showErrorMessage('No workspace folder open.');
-    return;
-  }
-
+  if (!root) { vscode.window.showErrorMessage('No workspace folder open.'); return; }
   const terminal = vscode.window.createTerminal('archmap');
   terminal.show();
   terminal.sendText(`npx archmap init --root "${root}"`);
@@ -181,7 +218,6 @@ async function runInit() {
 async function runScan() {
   const root = getWorkspaceRoot();
   if (!root) return;
-
   const terminal = vscode.window.createTerminal('archmap');
   terminal.show();
   terminal.sendText(`npx archmap scan --root "${root}"`);
@@ -200,112 +236,117 @@ async function showModuleQuickPick() {
     module: m,
   }));
 
-  const selected = await vscode.window.showQuickPick(items, {
-    placeHolder: 'Select a module to explore',
-  });
-
-  if (selected && selected.module.files.length > 0) {
-    const root = getWorkspaceRoot()!;
-    const firstFile = path.join(root, selected.module.files[0]);
-    const doc = await vscode.workspace.openTextDocument(firstFile);
+  const selected = await vscode.window.showQuickPick(items, { placeHolder: 'Select a module' });
+  if (selected?.module.files.length) {
+    const doc = await vscode.workspace.openTextDocument(path.join(getWorkspaceRoot()!, selected.module.files[0]));
     vscode.window.showTextDocument(doc);
   }
 }
 
-// --- Tree View Providers ---
+// --- Tree View: Modules ---
 
-class ModulesTreeProvider implements vscode.TreeDataProvider<ModuleTreeItem> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<ModuleTreeItem | undefined>();
+class ModulesTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
+  private _onDidChangeTreeData = new vscode.EventEmitter<vscode.TreeItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   refresh() { this._onDidChangeTreeData.fire(undefined); }
+  getTreeItem(element: vscode.TreeItem): vscode.TreeItem { return element; }
 
-  getTreeItem(element: ModuleTreeItem): vscode.TreeItem { return element; }
-
-  getChildren(element?: ModuleTreeItem): ModuleTreeItem[] {
+  getChildren(element?: vscode.TreeItem): vscode.TreeItem[] {
     if (!archmapData) return [];
+    if (element) return [];
 
-    if (!element) {
-      return archmapData.modules.map((m) => new ModuleTreeItem(
-        m.name,
-        `${m.publicApi.exports.length} exports`,
-        vscode.TreeItemCollapsibleState.Collapsed,
-        m,
-      ));
+    // Header with health
+    const items: vscode.TreeItem[] = [];
+    if (archmapData.health) {
+      const h = archmapData.health;
+      const header = new vscode.TreeItem(`Health: ${h.overall}/100 (${h.trend})`);
+      header.iconPath = new vscode.ThemeIcon(h.overall >= 80 ? 'pass' : h.overall >= 60 ? 'warning' : 'error');
+      items.push(header);
     }
 
-    if (element.module) {
-      const items: ModuleTreeItem[] = [];
-
-      // Exports
-      for (const exp of element.module.publicApi.exports.slice(0, 20)) {
-        items.push(new ModuleTreeItem(
-          `${exp.name}`,
-          exp.type,
-          vscode.TreeItemCollapsibleState.None,
-        ));
-      }
-
-      // Dependencies
-      if (element.module.internalDependencies.length > 0) {
-        items.push(new ModuleTreeItem(
-          '── Dependencies ──',
-          '',
-          vscode.TreeItemCollapsibleState.None,
-        ));
-        for (const dep of element.module.internalDependencies) {
-          items.push(new ModuleTreeItem(`→ ${dep}`, 'dependency', vscode.TreeItemCollapsibleState.None));
-        }
-      }
-
-      return items;
+    for (const m of archmapData.modules) {
+      const modHealth = archmapData.health?.moduleScores.find((ms) => ms.moduleId === m.id);
+      const healthSuffix = modHealth ? ` [${modHealth.score}]` : '';
+      const item = new vscode.TreeItem(`${m.name}${healthSuffix}`);
+      item.description = `${m.publicApi.exports.length} exp, ${m.internalDependencies.length} dep`;
+      item.iconPath = new vscode.ThemeIcon('symbol-module');
+      item.tooltip = `${m.id}\n${m.language} | ${m.files.length} files`;
+      items.push(item);
     }
 
-    return [];
+    return items;
   }
 }
 
-class ModuleTreeItem extends vscode.TreeItem {
-  constructor(
-    label: string,
-    description: string,
-    collapsibleState: vscode.TreeItemCollapsibleState,
-    public module?: ModuleInfo,
-  ) {
-    super(label, collapsibleState);
-    this.description = description;
-    if (module) {
-      this.iconPath = new vscode.ThemeIcon('symbol-module');
-      this.tooltip = `${module.id}\n${module.language} | ${module.files.length} files`;
-    }
-  }
-}
+// --- Tree View: Rules (grouped by tier) ---
 
 class RulesTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<vscode.TreeItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   refresh() { this._onDidChangeTreeData.fire(undefined); }
-
   getTreeItem(element: vscode.TreeItem): vscode.TreeItem { return element; }
 
-  getChildren(): vscode.TreeItem[] {
+  getChildren(element?: vscode.TreeItem): vscode.TreeItem[] {
     if (!archmapData) return [];
 
-    return archmapData.rules
-      .filter((r) => r.confidence >= 0.8)
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 20)
-      .map((rule) => {
+    // Parsing stats header
+    const items: vscode.TreeItem[] = [];
+    if (archmapData.parsing) {
+      const p = archmapData.parsing;
+      const label = p.pct === 100 ? `Parsing: 100% AST` : `Parsing: ${p.pct}% AST (${p.regex} regex)`;
+      const pi = new vscode.TreeItem(label);
+      pi.iconPath = new vscode.ThemeIcon(p.pct === 100 ? 'pass' : p.pct >= 80 ? 'warning' : 'error');
+      items.push(pi);
+    }
+
+    const tiers: Array<{ tier: 'rule' | 'convention' | 'observation'; label: string; icon: string }> = [
+      { tier: 'rule', label: 'Rules (MUST)', icon: 'error' },
+      { tier: 'convention', label: 'Conventions (SHOULD)', icon: 'warning' },
+      { tier: 'observation', label: 'Observations (INFO)', icon: 'info' },
+    ];
+
+    for (const { tier, label, icon } of tiers) {
+      const tierRules = archmapData.rules
+        .filter((r) => r.tier === tier)
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, 15);
+
+      if (tierRules.length === 0) continue;
+
+      const header = new vscode.TreeItem(`${label} (${tierRules.length})`);
+      header.iconPath = new vscode.ThemeIcon(icon);
+      items.push(header);
+
+      for (const rule of tierRules) {
         const pct = Math.round(rule.confidence * 100);
-        const item = new vscode.TreeItem(`[${pct}%] ${rule.description}`);
+        const trendIcon = rule.trend === 'strengthening' ? '↗' : rule.trend === 'weakening' ? '↘' : rule.trend === 'broken' ? '↓' : rule.trend === 'new' ? '★' : '';
+        const item = new vscode.TreeItem(`  ${trendIcon} [${pct}%] ${rule.description}`);
         item.iconPath = new vscode.ThemeIcon(
-          rule.type === 'boundary' ? 'shield' : rule.type === 'naming-convention' ? 'symbol-text' : 'info',
+          rule.category === 'boundary' ? 'shield' :
+          rule.category === 'naming' ? 'symbol-text' :
+          rule.category === 'layer' ? 'layers' :
+          rule.category === 'co-change' ? 'git-compare' : 'info',
         );
-        item.tooltip = `Type: ${rule.type}\nConfidence: ${pct}%\nSource: ${rule.id}`;
-        return item;
-      });
+        item.tooltip = [
+          `Category: ${rule.category}`,
+          `Tier: ${rule.tier}`,
+          `Confidence: ${pct}%`,
+          `Trend: ${rule.trend}`,
+          `Source: ${rule.source}`,
+          `Scope: ${rule.scope.join(', ')}`,
+          '',
+          `Action: ${rule.action}`,
+        ].join('\n');
+        items.push(item);
+      }
+    }
+
+    return items;
   }
 }
 
-export function deactivate() {}
+export function deactivate() {
+  OUTPUT.dispose();
+}

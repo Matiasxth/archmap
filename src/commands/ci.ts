@@ -27,9 +27,19 @@ export async function ciCommand(options: CiOptions) {
       config,
     });
 
-    const ruleViolations = result.rules.filter((r) => r.tier === 'rule' && r.evidence.recentViolations > 0);
-    const conventionViolations = result.rules.filter((r) => r.tier === 'convention' && r.evidence.recentViolations > 0);
-    const weakening = result.rules.filter((r) => r.trend === 'weakening' || r.trend === 'broken');
+    const minConf = parseFloat(options.minConfidence) || 0;
+    const relevantRules = result.rules.filter((r) => r.confidence >= minConf);
+    const ruleViolations = relevantRules.filter((r) => r.tier === 'rule' && r.evidence.recentViolations > 0);
+    const conventionViolations = relevantRules.filter((r) => r.tier === 'convention' && r.evidence.recentViolations > 0);
+    const weakening = relevantRules.filter((r) => r.trend === 'weakening' || r.trend === 'broken');
+
+    // Warn if AST coverage is low
+    const p = result.stats.parsing;
+    if (p.regex > 0) {
+      if (!options.json) {
+        console.log(chalk.yellow(`\n  ⚠ Parsing: ${p.pct}% AST (${p.regex} file(s) fell to regex fallback)`));
+      }
+    }
 
     const hasErrors = ruleViolations.length > 0 || (options.strict && conventionViolations.length > 0);
 
