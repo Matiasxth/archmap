@@ -1,0 +1,16 @@
+# archmap manual rules
+# Place this file at .archmap/rules.yml
+# Manual rules are always tier: rule (team decisions)
+
+rules:
+  # Example: forbid imports from a deprecated module
+  # - description: "Never import from legacy/"
+  #   category: boundary
+  #   scope: ["src/*"]
+  #   action: "This module is deprecated. Use src/v2/ instead."
+
+  # Example: enforce layer direction
+  # - description: "UI must not import directly from database layer"
+  #   category: layer
+  #   scope: ["src/ui", "src/db"]
+  #   action: "Use the service layer as intermediary."

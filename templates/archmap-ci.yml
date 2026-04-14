@@ -1,0 +1,41 @@
+name: Architecture Check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  archmap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for co-change analysis
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run archmap CI
+        run: npx archmap ci --json > archmap-report.json
+
+      - name: Check result
+        run: |
+          passed=$(jq -r '.passed' archmap-report.json)
+          health=$(jq -r '.health.overall' archmap-report.json)
+          echo "Health: $health/100"
+          echo "Passed: $passed"
+          if [ "$passed" != "true" ]; then
+            echo "::error::Architecture rules violated"
+            jq '.violations' archmap-report.json
+            exit 1
+          fi
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: archmap-report
+          path: archmap-report.json

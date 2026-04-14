@@ -1,0 +1,112 @@
+[
+  {
+    "name": "express",
+    "language": "javascript",
+    "description": "Node.js web framework (JS)",
+    "files": 7,
+    "modules": 2,
+    "dependencies": 6,
+    "rules": {
+      "total": 2,
+      "strong": 0,
+      "conventions": 0,
+      "observations": 2
+    },
+    "health": 100,
+    "parsing": {
+      "ast": 7,
+      "regex": 0,
+      "pct": 100,
+      "regexFiles": []
+    },
+    "duration": 726
+  },
+  {
+    "name": "fastify",
+    "language": "javascript",
+    "description": "Fast Node.js web framework (JS)",
+    "files": 35,
+    "modules": 4,
+    "dependencies": 106,
+    "rules": {
+      "total": 10,
+      "strong": 0,
+      "conventions": 0,
+      "observations": 10
+    },
+    "health": 100,
+    "parsing": {
+      "ast": 35,
+      "regex": 0,
+      "pct": 100,
+      "regexFiles": []
+    },
+    "duration": 1050
+  },
+  {
+    "name": "zod",
+    "language": "typescript",
+    "description": "TypeScript schema validation (TS)",
+    "files": 185,
+    "modules": 18,
+    "dependencies": 420,
+    "rules": {
+      "total": 169,
+      "strong": 3,
+      "conventions": 9,
+      "observations": 157
+    },
+    "health": 95,
+    "parsing": {
+      "ast": 185,
+      "regex": 0,
+      "pct": 100,
+      "regexFiles": []
+    },
+    "duration": 3714
+  },
+  {
+    "name": "flask",
+    "language": "python",
+    "description": "Python web framework",
+    "files": 24,
+    "modules": 1,
+    "dependencies": 66,
+    "rules": {
+      "total": 1,
+      "strong": 0,
+      "conventions": 1,
+      "observations": 0
+    },
+    "health": 100,
+    "parsing": {
+      "ast": 24,
+      "regex": 0,
+      "pct": 100,
+      "regexFiles": []
+    },
+    "duration": 566
+  },
+  {
+    "name": "gin",
+    "language": "go",
+    "description": "Go HTTP framework",
+    "files": 99,
+    "modules": 8,
+    "dependencies": 0,
+    "rules": {
+      "total": 37,
+      "strong": 1,
+      "conventions": 7,
+      "observations": 29
+    },
+    "health": 100,
+    "parsing": {
+      "ast": 99,
+      "regex": 0,
+      "pct": 100,
+      "regexFiles": []
+    },
+    "duration": 1475
+  }
+]

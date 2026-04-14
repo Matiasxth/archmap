@@ -1,17 +1,38 @@
 # archmap
 
-> Architecture-as-Code for AI Agents
+> The architectural context layer for AI agents and teams
 
 [![npm version](https://img.shields.io/npm/v/archmap.svg)](https://www.npmjs.com/package/archmap)
 [![license](https://img.shields.io/npm/l/archmap.svg)](https://github.com/matiasxth/archmap/blob/main/LICENSE)
 
-AI coding agents fail 60%+ of the time because they don't understand your codebase architecture. **archmap** fixes this by scanning your repo and generating a machine-readable architecture map that any AI agent can consume.
+AI coding agents break things because they don't understand your architecture. **archmap** scans your codebase and generates architectural context that agents and tools consume automatically.
 
 ```bash
 npx archmap init
 ```
 
-That's it. Your `.archmap/` directory is ready. Claude Code, Cursor, Codex — they all benefit instantly.
+One command. Your agent now knows every module boundary, dependency rule, and implicit contract.
+
+| Surface | What it provides |
+|---------|-----------------|
+| **CLI** | Generate and inspect context |
+| **SUMMARY.md** | Context readable by any agent |
+| **JSON** | Context structured for tools |
+| **MCP** | Context queryable in real-time |
+| **CI** | Context used as guardrail |
+| **VS Code** | Context visible in your editor |
+
+## Benchmarked on real projects
+
+| Repo | Language | Files | AST coverage | Modules | Duration |
+|------|----------|-------|-------------|---------|----------|
+| express | JavaScript | 7 | 100% | 2 | 726ms |
+| fastify | JavaScript | 35 | 100% | 4 | 1050ms |
+| zod | TypeScript | 185 | 100% | 18 | 3714ms |
+| flask | Python | 24 | 100% | 1 | 566ms |
+| gin | Go | 99 | 100% | 8 | 1475ms |
+
+See the [demo repo](https://github.com/matiasxth/archmap-demo) for a complete before/after example.
 
 ## What it does
 
@@ -302,9 +323,26 @@ console.log(generateMarkdown(result)); // SUMMARY.md content
 - **Zero config** — works out of the box with `npx archmap init`
 - **Honest about limits** — parsing stats, confidence scores, and signal counts are always visible
 
+## Quick setup templates
+
+Ready-to-copy files in [`templates/`](./templates/):
+
+| File | Purpose |
+|------|---------|
+| [`mcp.json`](./templates/mcp.json) | MCP server config for Claude Code |
+| [`archmap-ci.yml`](./templates/archmap-ci.yml) | GitHub Actions workflow |
+| [`.cursorrules`](./templates/.cursorrules) | Cursor integration |
+| [`rules.yml`](./templates/rules.yml) | Manual rules starter |
+
 ## Supported languages
 
-TypeScript, JavaScript, Python, Go, Rust, Java — all with AST and regex fallback.
+TypeScript, JavaScript, Python, Go, Rust, Java — all with tree-sitter AST parsing and regex fallback.
+
+## Links
+
+- [Demo repo](https://github.com/matiasxth/archmap-demo) — before/after example
+- [Benchmark report](./benchmarks/REPORT.md) — precision on real projects
+- [npm](https://www.npmjs.com/package/archmap)
 
 ## License
 
