@@ -98,8 +98,8 @@ export async function scanProject(
     }
   } catch { /* no previous rules */ }
 
-  // 8. Infer rules with semantic tiers
-  const inferredRules = inferRules(modules, moduleGraph, parseResults, contracts, options.config, previousRules);
+  // 8. Infer rules via multi-signal convergence
+  const inferredRules = await inferRules(modules, moduleGraph, parseResults, contracts, options.config, root, previousRules);
 
   // 9. Load manual rules
   const manualRules = await loadManualRules(root);
