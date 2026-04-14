@@ -6,6 +6,7 @@ import { hookCommand } from '../src/commands/hook.js';
 import { showCommand } from '../src/commands/show.js';
 import { ciCommand } from '../src/commands/ci.js';
 import { mcpCommand } from '../src/commands/mcp.js';
+import { diffCommand } from '../src/commands/diff.js';
 import { getVersion } from '../src/utils/version.js';
 
 const program = new Command();
@@ -70,5 +71,12 @@ program
   .description('Start MCP server (stdio transport) for AI agent integration')
   .option('-r, --root <path>', 'Root directory', '.')
   .action(mcpCommand);
+
+program
+  .command('diff')
+  .description('Show architectural changes since last scan')
+  .option('-r, --root <path>', 'Root directory', '.')
+  .option('--json', 'Output as JSON')
+  .action(diffCommand);
 
 program.parse();

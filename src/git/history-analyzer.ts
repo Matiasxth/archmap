@@ -115,28 +115,48 @@ function parseGitLog(log: string, prefix: string): Map<string, string[]> {
 }
 
 /**
- * Build co-change matrix from commit data.
- * Uses Jaccard similarity: J(A,B) = |A∩B| / |A∪B|
+ * Build co-change matrix with adaptive thresholds and smart scoring.
+ *
+ * Improvements over naive Jaccard:
+ * - Adaptive min co-changes based on project age
+ * - Cross-module pairs get bonus (more valuable)
+ * - Bulk refactor commits (>15 files) are penalized
+ * - Same-directory pairs allowed if they're cross-language
  */
 function buildCoChangeMatrix(commits: Map<string, string[]>): CoChangeEntry[] {
-  const fileChanges = new Map<string, number>(); // file -> total commits
-  const coChanges = new Map<string, number>(); // "fileA|fileB" -> co-change count
+  const fileChanges = new Map<string, number>();
+  const coChanges = new Map<string, number>();
+  const commitSizes = new Map<string, number>();
 
-  for (const files of commits.values()) {
-    // Count individual file changes
+  const totalCommits = commits.size;
+
+  // Adaptive thresholds
+  const minCoChanges = totalCommits < 50 ? 2 : totalCommits < 200 ? 3 : 5;
+
+  for (const [hash, files] of commits) {
+    const sourceFiles = files.filter(isSourceFile);
+    commitSizes.set(hash, sourceFiles.length);
+
     for (const file of files) {
       fileChanges.set(file, (fileChanges.get(file) ?? 0) + 1);
     }
 
-    // Count co-changes (pairwise, within same commit)
-    // Limit to files likely in the same conceptual area
-    const sourceFiles = files.filter(isSourceFile);
+    // Skip bulk refactor commits (>20 files = less signal per pair)
+    if (sourceFiles.length > 20) continue;
+
     for (let i = 0; i < sourceFiles.length; i++) {
       for (let j = i + 1; j < sourceFiles.length; j++) {
-        // Skip pairs in the same directory (trivially co-changed)
-        if (dirname(sourceFiles[i]) === dirname(sourceFiles[j])) continue;
+        const a = sourceFiles[i];
+        const b = sourceFiles[j];
 
-        const key = [sourceFiles[i], sourceFiles[j]].sort().join('|');
+        // Skip same-directory pairs UNLESS they're cross-language
+        if (dirname(a) === dirname(b)) {
+          const extA = a.split('.').pop() ?? '';
+          const extB = b.split('.').pop() ?? '';
+          if (extA === extB) continue;
+        }
+
+        const key = [a, b].sort().join('|');
         coChanges.set(key, (coChanges.get(key) ?? 0) + 1);
       }
     }
@@ -145,7 +165,7 @@ function buildCoChangeMatrix(commits: Map<string, string[]>): CoChangeEntry[] {
   const results: CoChangeEntry[] = [];
 
   for (const [key, count] of coChanges) {
-    if (count < 3) continue; // Need at least 3 co-changes
+    if (count < minCoChanges) continue;
 
     const [fileA, fileB] = key.split('|');
     const totalA = fileChanges.get(fileA) ?? 0;

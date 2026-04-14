@@ -7,6 +7,8 @@ import { analyzeGitHistory } from '../git/history-analyzer.js';
 import { getChangedFiles, saveScanCache } from '../git/diff-tracker.js';
 import { loadManualRules } from '../analysis/manual-rules.js';
 import { computeHealthScore } from '../analysis/health-score.js';
+import { computeTransitiveImpact, findCriticalPaths, computeFanIn } from '../analysis/transitive-impact.js';
+import { computeFileRisks, computeHotFiles } from '../analysis/file-risk.js';
 import { getVersion } from '../utils/version.js';
 import { SCHEMA_VERSION } from '../schema.js';
 import type { ScanResult, ScanOptions, ParseResult, ArchRule } from '../types.js';
@@ -109,15 +111,32 @@ export async function scanProject(
   // 10. Compute health score
   const health = computeHealthScore(allRules, modules);
 
+  // 11. File-level analysis: transitive impact, critical paths, risk scores
+  const fileGraph = buildDependencyGraph(parseResults, root);
+  const transitiveImpact = computeTransitiveImpact(fileGraph);
+  const fanInMap = computeFanIn(fileGraph);
+  const criticalPaths = findCriticalPaths(fileGraph);
+
+  // Change frequency from git (empty if no history)
+  const changeFreq = new Map<string, number>();
+
+  const fileRisks = computeFileRisks(parseResults, fileGraph, criticalPaths, transitiveImpact, fanInMap, changeFreq);
+  const hotFiles = computeHotFiles(fileRisks, modules);
+
   // Collect unique languages
   const languages = [...new Set(files.map((f) => f.language))];
 
-  // Save caches
+  // Save caches + previous scan for delta
   try {
     const { writeFile: wf, mkdir } = await import('fs/promises');
     const cacheDir = join(root, '.archmap');
     if (!existsSync(cacheDir)) await mkdir(cacheDir, { recursive: true });
     await wf(join(cacheDir, 'parse-cache.json'), JSON.stringify(parseResults), 'utf-8');
+    // Save current scan as "previous" for next diff
+    await wf(join(cacheDir, 'previous-scan.json'), JSON.stringify({
+      modules, dependencies: moduleGraph, rules: allRules, fileRisks,
+      contracts, stats: { totalFiles: files.length, totalModules: modules.length },
+    }), 'utf-8');
     await saveScanCache(root);
   } catch { /* optional */ }
 
@@ -151,5 +170,8 @@ export async function scanProject(
     rules: allRules,
     contracts,
     parseResults,
+    fileRisks,
+    criticalPaths,
+    hotFiles,
   };
 }

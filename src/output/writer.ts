@@ -41,6 +41,13 @@ export async function writeOutput(root: string, result: ScanResult): Promise<voi
   await writeJson(join(dir, 'contracts.json'), {
     contracts: result.contracts,
   });
+
+  // Write file-level analysis
+  await writeJson(join(dir, 'file-risks.json'), {
+    fileRisks: result.fileRisks,
+    criticalPaths: result.criticalPaths,
+    hotFiles: result.hotFiles,
+  });
 }
 
 async function writeJson(path: string, data: unknown): Promise<void> {

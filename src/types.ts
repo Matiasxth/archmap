@@ -141,6 +141,45 @@ export interface HealthScore {
   }>;
 }
 
+// --- File-Level Analysis ---
+
+export interface FileRisk {
+  file: string;
+  risk: 'low' | 'medium' | 'high' | 'critical';
+  score: number;
+  transitiveImpact: number;
+  fanIn: number;
+  changeFrequency: number;
+  isOnCriticalPath: boolean;
+  hasTests: boolean;
+  testFiles: string[];
+}
+
+export interface CriticalPath {
+  files: string[];
+  length: number;
+  rootFile: string;
+  leafFile: string;
+}
+
+export interface HotFile {
+  file: string;
+  importance: number;
+  risk: FileRisk['risk'];
+  fanIn: number;
+  transitiveImpact: number;
+  module: string;
+}
+
+export interface ArchDelta {
+  newDependencies: Array<{ from: string; to: string }>;
+  removedDependencies: Array<{ from: string; to: string }>;
+  newModules: string[];
+  removedModules: string[];
+  riskChanges: Array<{ file: string; before: string; after: string }>;
+  ruleChanges: { added: number; removed: number; promoted: number; demoted: number };
+}
+
 // --- Scan Result ---
 
 export interface ScanResult {
@@ -175,6 +214,9 @@ export interface ScanResult {
   rules: ArchRule[];
   contracts: ImplicitContract[];
   parseResults: ParseResult[];
+  fileRisks: FileRisk[];
+  criticalPaths: CriticalPath[];
+  hotFiles: HotFile[];
 }
 
 export interface ScanOptions {
