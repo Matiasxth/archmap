@@ -141,6 +141,21 @@ export interface HealthScore {
   }>;
 }
 
+// --- Resource Chains ---
+
+export interface ResourceChain {
+  resource: string;
+  links: ResourceChainLink[];
+  languages: string[];
+  isCrossStack: boolean;
+}
+
+export interface ResourceChainLink {
+  file: string;
+  role: string;
+  language: string;
+}
+
 // --- File-Level Analysis ---
 
 export interface FileRisk {
@@ -217,6 +232,7 @@ export interface ScanResult {
   fileRisks: FileRisk[];
   criticalPaths: CriticalPath[];
   hotFiles: HotFile[];
+  resourceChains: ResourceChain[];
 }
 
 export interface ScanOptions {

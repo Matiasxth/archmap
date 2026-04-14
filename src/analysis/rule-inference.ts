@@ -5,6 +5,7 @@ import type {
 import { collectStaticSignals } from './signals/static-signals.js';
 import { collectHistorySignals } from './signals/history-signals.js';
 import { collectConfigSignals } from './signals/config-signals.js';
+import { collectCrossStackSignals } from './signals/cross-stack-signals.js';
 import { detectArchPattern } from './signals/pattern-detector.js';
 import { combineSignals } from './signals/signal-combiner.js';
 import type { Signal } from './signals/types.js';
@@ -36,7 +37,9 @@ export async function inferRules(
     : [];
   const configSignals = await collectConfigSignals(root).catch(() => [] as Signal[]);
 
-  const allSignals = [...staticSignals, ...historySignals, ...configSignals];
+  const crossStackSignals = collectCrossStackSignals(parseResults);
+
+  const allSignals = [...staticSignals, ...historySignals, ...configSignals, ...crossStackSignals];
 
   // 2. Detect architectural patterns
   const { pattern, signals: patternSignals } = detectArchPattern(modules, graph);

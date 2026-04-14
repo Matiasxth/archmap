@@ -169,6 +169,16 @@ export function createMcpServer(root: string) {
         c.entities.some((e: string) => file_path.includes(e) || e.includes(file_path)),
       );
 
+      // Find resource chain this file belongs to
+      let resourceChain = null;
+      try {
+        const risks = await loadJson('file-risks.json');
+        const chains = risks.resourceChains ?? [];
+        resourceChain = chains.find((c: any) =>
+          c.links.some((l: any) => l.file === file_path || file_path.includes(l.file) || l.file.includes(file_path)),
+        );
+      } catch { /* optional */ }
+
       const result = {
         file: file_path,
         module: ownerModule?.id ?? 'unknown',
@@ -178,6 +188,11 @@ export function createMcpServer(root: string) {
           pairedWith: c.entities.filter((e: string) => e !== file_path),
           confidence: c.confidence,
         })),
+        resourceChain: resourceChain ? {
+          resource: resourceChain.resource,
+          isCrossStack: resourceChain.isCrossStack,
+          chain: resourceChain.links.map((l: any) => `${l.role}: ${l.file} (${l.language})`),
+        } : null,
       };
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };

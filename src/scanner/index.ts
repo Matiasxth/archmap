@@ -9,6 +9,7 @@ import { loadManualRules } from '../analysis/manual-rules.js';
 import { computeHealthScore } from '../analysis/health-score.js';
 import { computeTransitiveImpact, findCriticalPaths, computeFanIn } from '../analysis/transitive-impact.js';
 import { computeFileRisks, computeHotFiles } from '../analysis/file-risk.js';
+import { detectResourceChains } from '../analysis/resource-chains.js';
 import { getVersion } from '../utils/version.js';
 import { SCHEMA_VERSION } from '../schema.js';
 import type { ScanResult, ScanOptions, ParseResult, ArchRule } from '../types.js';
@@ -123,6 +124,9 @@ export async function scanProject(
   const fileRisks = computeFileRisks(parseResults, fileGraph, criticalPaths, transitiveImpact, fanInMap, changeFreq);
   const hotFiles = computeHotFiles(fileRisks, modules);
 
+  // 12. Detect resource chains (cross-stack naming patterns)
+  const resourceChains = detectResourceChains(parseResults);
+
   // Collect unique languages
   const languages = [...new Set(files.map((f) => f.language))];
 
@@ -173,5 +177,6 @@ export async function scanProject(
     fileRisks,
     criticalPaths,
     hotFiles,
+    resourceChains,
   };
 }

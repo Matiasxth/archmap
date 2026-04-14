@@ -43,6 +43,26 @@ export function generateMarkdown(result: ScanResult): string {
     lines.push('');
   }
 
+  // Resource Chains (cross-stack)
+  const crossChains = (result.resourceChains ?? []).filter((c) => c.links.length >= 2);
+  if (crossChains.length > 0) {
+    lines.push('## Resource Chains');
+    lines.push('');
+    lines.push('Files linked by resource name. If you edit one, review downstream files.');
+    lines.push('');
+    for (const chain of crossChains.slice(0, 10)) {
+      const crossLabel = chain.isCrossStack ? ' (cross-stack)' : '';
+      lines.push(`### ${chain.resource}${crossLabel}`);
+      lines.push('');
+      lines.push('| Role | File | Language |');
+      lines.push('|------|------|----------|');
+      for (const link of chain.links) {
+        lines.push(`| ${link.role} | \`${link.file}\` | ${link.language} |`);
+      }
+      lines.push('');
+    }
+  }
+
   // Key Relationships
   if (result.contracts.length > 0) {
     lines.push('## Key Relationships');
