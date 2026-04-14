@@ -41,7 +41,7 @@ describe('CI Mode', () => {
     // All rules should have required fields
     for (const rule of result.rules) {
       expect(rule.id).toBeDefined();
-      expect(rule.type).toBeDefined();
+      expect(rule.category).toBeDefined();
       expect(rule.confidence).toBeGreaterThanOrEqual(0);
       expect(rule.confidence).toBeLessThanOrEqual(1);
       expect(rule.description).toBeTruthy();

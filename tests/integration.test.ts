@@ -94,7 +94,7 @@ describe('Integration: Full Scan', () => {
 
     expect(result.rules.length).toBeGreaterThan(0);
     // Should infer that models doesn't import from routes (boundary)
-    const hasBoundaryRule = result.rules.some((r) => r.type === 'boundary');
+    const hasBoundaryRule = result.rules.some((r) => r.category === 'boundary');
     expect(hasBoundaryRule).toBe(true);
   });
 

@@ -13,12 +13,14 @@ const DEFAULT_CONFIG: ArchmapConfig = {
   gitHistory: {
     maxCommits: 1000,
     minCoChangeConfidence: 0.7,
+    trendWindow: 100,
   },
   agentIntegration: {
     updateClaudeMd: true,
     updateCursorRules: false,
     summaryPath: '.archmap/SUMMARY.md',
   },
+  ruleOverrides: {},
 };
 
 export async function loadConfig(root: string): Promise<ArchmapConfig> {

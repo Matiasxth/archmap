@@ -1,165 +1,92 @@
-import { resolve, join } from 'path';
-import { readFile } from 'fs/promises';
-import { existsSync } from 'fs';
+import { resolve } from 'path';
 import chalk from 'chalk';
 import { scanProject } from '../scanner/index.js';
 import { loadConfig } from '../utils/config.js';
-import { findCircularDeps, buildDependencyGraph } from '../analysis/dependency-graph.js';
-import type { ArchRule } from '../types.js';
 
 interface CiOptions {
   root: string;
   minConfidence: string;
+  strict: boolean;
   json: boolean;
 }
 
-interface Violation {
-  rule: ArchRule;
-  severity: 'error' | 'warning';
-}
-
 /**
- * CI mode: scan the project and exit non-zero if architectural rules are violated.
- * Designed for CI/CD pipelines.
+ * CI mode: tier-aware exit codes.
+ *   - Rules violated → exit 1 (error)
+ *   - Conventions violated → warning (or exit 1 if --strict)
+ *   - Observations → informational only
  */
 export async function ciCommand(options: CiOptions) {
   const root = resolve(options.root);
-  const minConfidence = parseFloat(options.minConfidence);
-  const violations: Violation[] = [];
 
   try {
     const config = await loadConfig(root);
-
-    // Run a fresh scan
     const result = await scanProject(root, {
       gitHistory: true,
       verbose: false,
       config,
     });
 
-    // Check 1: Circular dependencies
-    const cycles = findCircularDeps(
-      buildDependencyGraph(result.parseResults, root),
-    );
-    if (cycles.length > 0) {
-      for (const cycle of cycles) {
-        violations.push({
-          rule: {
-            id: 'circular-dep',
-            type: 'boundary',
-            confidence: 1.0,
-            description: `Circular dependency: ${cycle.join(' → ')}`,
-            source: 'static-analysis',
-            evidence: { cycle },
-          },
-          severity: 'error',
-        });
-      }
-    }
+    const ruleViolations = result.rules.filter((r) => r.tier === 'rule' && r.evidence.recentViolations > 0);
+    const conventionViolations = result.rules.filter((r) => r.tier === 'convention' && r.evidence.recentViolations > 0);
+    const weakening = result.rules.filter((r) => r.trend === 'weakening' || r.trend === 'broken');
 
-    // Check 2: High-confidence rules — if we have a previous scan, compare
-    const rulesPath = join(root, '.archmap', 'rules.json');
-    if (existsSync(rulesPath)) {
-      const prevData = JSON.parse(await readFile(rulesPath, 'utf-8'));
-      const prevRules: ArchRule[] = prevData.rules.filter(
-        (r: ArchRule) => r.confidence >= minConfidence,
-      );
+    const hasErrors = ruleViolations.length > 0 || (options.strict && conventionViolations.length > 0);
 
-      // Check if any previous boundary rules are now violated
-      for (const prevRule of prevRules) {
-        if (prevRule.type === 'boundary' && prevRule.evidence) {
-          const ev = prevRule.evidence as Record<string, string>;
-          if (ev.from && ev.to && ev.direction === 'unidirectional') {
-            // Check if the reverse dependency now exists
-            const mod = result.modules.find((m) => m.id === ev.to);
-            if (mod && mod.internalDependencies.includes(ev.from)) {
-              violations.push({
-                rule: {
-                  ...prevRule,
-                  description: `VIOLATED: ${prevRule.description}`,
-                },
-                severity: 'error',
-              });
-            }
-          }
-        }
-      }
-    }
-
-    // Check 3: Naming convention violations
-    for (const rule of result.rules) {
-      if (
-        rule.type === 'naming-convention' &&
-        rule.confidence >= minConfidence &&
-        rule.evidence
-      ) {
-        const ev = rule.evidence as { exceptions?: string[] };
-        if (ev.exceptions && ev.exceptions.length > 0) {
-          violations.push({ rule, severity: 'warning' });
-        }
-      }
-    }
-
-    // Output
     if (options.json) {
-      console.log(
-        JSON.stringify(
-          {
-            passed: violations.filter((v) => v.severity === 'error').length === 0,
-            violations: violations.map((v) => ({
-              severity: v.severity,
-              type: v.rule.type,
-              description: v.rule.description,
-              confidence: v.rule.confidence,
-            })),
-            stats: result.stats,
-          },
-          null,
-          2,
-        ),
-      );
+      console.log(JSON.stringify({
+        passed: !hasErrors,
+        health: result.health,
+        violations: {
+          rules: ruleViolations.map((r) => ({ tier: r.tier, category: r.category, description: r.description, action: r.action })),
+          conventions: conventionViolations.map((r) => ({ tier: r.tier, category: r.category, description: r.description, action: r.action })),
+        },
+        drift: weakening.map((r) => ({ tier: r.tier, trend: r.trend, description: r.description })),
+        stats: result.stats,
+      }, null, 2));
     } else {
-      const errors = violations.filter((v) => v.severity === 'error');
-      const warnings = violations.filter((v) => v.severity === 'warning');
-
+      const h = result.health;
       console.log('');
-      console.log(
-        chalk.bold(`  archmap ci — ${result.stats.totalFiles} files, ${result.stats.totalModules} modules`),
-      );
+      console.log(chalk.bold(`  archmap ci — ${result.stats.totalFiles} files, ${result.stats.totalModules} modules`));
+      console.log(`  Health: ${scoreColor(h.overall)}${h.overall}/100${chalk.reset} | ${result.stats.totalStrongRules} rules, ${result.stats.totalConventions} conventions, ${result.stats.totalObservations} observations`);
       console.log('');
 
-      if (errors.length > 0) {
-        console.log(chalk.red.bold(`  ${errors.length} error(s):`));
-        for (const v of errors) {
-          console.log(chalk.red(`    ✗ ${v.rule.description}`));
+      if (ruleViolations.length > 0) {
+        console.log(chalk.red.bold(`  ${ruleViolations.length} rule violation(s):`));
+        for (const v of ruleViolations) {
+          console.log(chalk.red(`    ✗ [RULE] ${v.description}`));
+          console.log(chalk.dim(`      → ${v.action}`));
         }
         console.log('');
       }
 
-      if (warnings.length > 0) {
-        console.log(chalk.yellow.bold(`  ${warnings.length} warning(s):`));
-        for (const v of warnings) {
-          console.log(chalk.yellow(`    ⚠ ${v.rule.description}`));
+      if (conventionViolations.length > 0) {
+        console.log(chalk.yellow.bold(`  ${conventionViolations.length} convention violation(s):`));
+        for (const v of conventionViolations) {
+          console.log(chalk.yellow(`    ⚠ [CONVENTION] ${v.description}`));
+          console.log(chalk.dim(`      → ${v.action}`));
         }
         console.log('');
       }
 
-      if (errors.length === 0 && warnings.length === 0) {
-        console.log(chalk.green('  ✓ All architectural rules pass.'));
+      if (weakening.length > 0) {
+        console.log(chalk.magenta(`  ${weakening.length} drifting pattern(s):`));
+        for (const w of weakening) {
+          console.log(chalk.dim(`    ↘ [${w.trend.toUpperCase()}] ${w.description}`));
+        }
         console.log('');
-      } else if (errors.length === 0) {
-        console.log(
-          chalk.green('  ✓ No errors. Warnings do not fail the build.'),
-        );
+      }
+
+      if (!hasErrors && ruleViolations.length === 0 && conventionViolations.length === 0) {
+        console.log(chalk.green('  ✓ All architectural rules and conventions pass.'));
+        console.log('');
+      } else if (!hasErrors) {
+        console.log(chalk.green('  ✓ No rule errors. Convention warnings do not fail the build.'));
         console.log('');
       }
     }
 
-    // Exit code: non-zero only for errors
-    const errorCount = violations.filter((v) => v.severity === 'error').length;
-    if (errorCount > 0) {
-      process.exit(1);
-    }
+    if (hasErrors) process.exit(1);
   } catch (error) {
     if (options.json) {
       console.log(JSON.stringify({ passed: false, error: (error as Error).message }));
@@ -168,4 +95,10 @@ export async function ciCommand(options: CiOptions) {
     }
     process.exit(1);
   }
+}
+
+function scoreColor(score: number): string {
+  if (score >= 90) return chalk.green('');
+  if (score >= 70) return chalk.yellow('');
+  return chalk.red('');
 }

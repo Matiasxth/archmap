@@ -5,16 +5,18 @@ import { detectModules, inferLayers } from '../analysis/module-boundaries.js';
 import { inferRules } from '../analysis/rule-inference.js';
 import { analyzeGitHistory } from '../git/history-analyzer.js';
 import { getChangedFiles, saveScanCache } from '../git/diff-tracker.js';
-import type { ScanResult, ScanOptions, ParseResult } from '../types.js';
+import { loadManualRules } from '../analysis/manual-rules.js';
+import { computeHealthScore } from '../analysis/health-score.js';
+import { getVersion } from '../utils/version.js';
+import type { ScanResult, ScanOptions, ParseResult, ArchRule } from '../types.js';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
-import { getVersion } from '../utils/version.js';
+
+const SCHEMA_VERSION = 2;
 
 /**
  * Main scanner orchestrator.
- * Coordinates: file discovery → parsing → analysis → output.
- * Supports incremental scanning: only re-parses files changed since last scan.
  */
 export async function scanProject(
   root: string,
@@ -30,22 +32,15 @@ export async function scanProject(
   const changedFiles = await getChangedFiles(root);
 
   if (changedFiles !== null && existsSync(join(root, '.archmap', 'parse-cache.json'))) {
-    // Incremental: load cache, re-parse only changed files
     try {
       const cacheRaw = await readFile(join(root, '.archmap', 'parse-cache.json'), 'utf-8');
       const cachedResults: ParseResult[] = JSON.parse(cacheRaw);
       const changedSet = new Set(changedFiles.map((f) => f.replace(/\\/g, '/')));
-
-      // Keep cached results for unchanged files
       const unchanged = cachedResults.filter((r) => !changedSet.has(r.filePath));
-
-      // Re-parse only changed files
       const changedDiscovered = files.filter((f) => changedSet.has(f.relativePath));
       const freshResults = await parseFiles(changedDiscovered);
-
       parseResults = [...unchanged, ...freshResults];
     } catch {
-      // Cache corrupted — fall back to full scan
       parseResults = await parseFiles(files);
     }
   } else {
@@ -62,53 +57,63 @@ export async function scanProject(
   const layers = inferLayers(modules);
   graph.layers = layers;
 
-  // Update graph nodes to module level
   const moduleGraph = {
     ...graph,
     nodes: [
-      ...modules.map((m) => ({
-        id: m.id,
-        label: m.name,
-        type: 'module' as const,
-      })),
+      ...modules.map((m) => ({ id: m.id, label: m.name, type: 'module' as const })),
       ...graph.nodes.filter((n) => n.type === 'external'),
     ],
   };
 
-  // 6. Infer rules from static analysis
-  const rules = inferRules(modules, moduleGraph, parseResults);
-
-  // 7. Analyze git history (optional)
+  // 6. Analyze git history (optional)
   let contracts: ScanResult['contracts'] = [];
   if (options.gitHistory) {
     try {
       contracts = await analyzeGitHistory(root, options.config);
-    } catch {
-      // Git history analysis is optional — fail silently
-    }
+    } catch { /* optional */ }
   }
+
+  // 7. Load previous rules for trend computation
+  let previousRules: ArchRule[] | undefined;
+  try {
+    const prevPath = join(root, '.archmap', 'rules.json');
+    if (existsSync(prevPath)) {
+      const prevRaw = JSON.parse(await readFile(prevPath, 'utf-8'));
+      previousRules = prevRaw.rules;
+    }
+  } catch { /* no previous rules */ }
+
+  // 8. Infer rules with semantic tiers
+  const inferredRules = inferRules(modules, moduleGraph, parseResults, contracts, options.config, previousRules);
+
+  // 9. Load manual rules
+  const manualRules = await loadManualRules(root);
+  const allRules = [...manualRules, ...inferredRules];
+
+  // 10. Compute health score
+  const health = computeHealthScore(allRules, modules);
 
   // Collect unique languages
   const languages = [...new Set(files.map((f) => f.language))];
 
-  // Save caches for incremental scanning
+  // Save caches
   try {
     const { writeFile: wf, mkdir } = await import('fs/promises');
     const cacheDir = join(root, '.archmap');
     if (!existsSync(cacheDir)) await mkdir(cacheDir, { recursive: true });
     await wf(join(cacheDir, 'parse-cache.json'), JSON.stringify(parseResults), 'utf-8');
     await saveScanCache(root);
-  } catch {
-    // Cache save is optional
-  }
+  } catch { /* optional */ }
 
   const scanDuration = Date.now() - startTime;
+  const version = getVersion();
 
   return {
+    schemaVersion: SCHEMA_VERSION,
     manifest: {
-      version: getVersion(),
+      version,
       generatedAt: new Date().toISOString(),
-      generatedBy: `archmap@${getVersion()}`,
+      generatedBy: `archmap@${version}`,
       repoRoot: root,
       languages,
       scanDuration,
@@ -117,12 +122,16 @@ export async function scanProject(
       totalFiles: files.length,
       totalModules: modules.length,
       totalDependencies: moduleGraph.edges.length,
-      totalRules: rules.length,
+      totalRules: allRules.length,
       totalContracts: contracts.length,
+      totalObservations: allRules.filter((r) => r.tier === 'observation').length,
+      totalConventions: allRules.filter((r) => r.tier === 'convention').length,
+      totalStrongRules: allRules.filter((r) => r.tier === 'rule').length,
     },
+    health,
     modules,
     dependencies: moduleGraph,
-    rules,
+    rules: allRules,
     contracts,
     parseResults,
   };

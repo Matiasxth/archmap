@@ -13,10 +13,12 @@ export async function writeOutput(root: string, result: ScanResult): Promise<voi
     await mkdir(dir, { recursive: true });
   }
 
-  // Write manifest
+  // Write manifest (includes health score)
   await writeJson(join(dir, 'manifest.json'), {
+    schemaVersion: result.schemaVersion,
     ...result.manifest,
     stats: result.stats,
+    health: result.health,
   });
 
   // Write modules
@@ -29,8 +31,9 @@ export async function writeOutput(root: string, result: ScanResult): Promise<voi
     graph: result.dependencies,
   });
 
-  // Write rules
+  // Write rules (schema v2 with tiers)
   await writeJson(join(dir, 'rules.json'), {
+    schemaVersion: result.schemaVersion,
     rules: result.rules,
   });
 

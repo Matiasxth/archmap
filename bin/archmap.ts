@@ -36,8 +36,9 @@ program
 
 program
   .command('rules')
-  .description('List inferred architectural rules')
+  .description('List architectural rules grouped by tier')
   .option('-r, --root <path>', 'Root directory', '.')
+  .option('-t, --tier <tier>', 'Filter by tier: rule, convention, observation, all', 'all')
   .option('--json', 'Output as JSON')
   .action(rulesCommand);
 
@@ -60,6 +61,7 @@ program
   .description('Check architectural rules — exits non-zero on violations (for CI)')
   .option('-r, --root <path>', 'Root directory', '.')
   .option('--min-confidence <n>', 'Minimum rule confidence to enforce (0-1)', '0.8')
+  .option('--strict', 'Treat convention violations as errors too')
   .option('--json', 'Output as JSON')
   .action(ciCommand);
 

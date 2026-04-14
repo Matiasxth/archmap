@@ -1,3 +1,5 @@
+// --- Config ---
+
 export interface ArchmapConfig {
   version: number;
   exclude: string[];
@@ -8,13 +10,17 @@ export interface ArchmapConfig {
   gitHistory: {
     maxCommits: number;
     minCoChangeConfidence: number;
+    trendWindow: number; // last N commits for trend calculation
   };
   agentIntegration: {
     updateClaudeMd: boolean;
     updateCursorRules: boolean;
     summaryPath: string;
   };
+  ruleOverrides: Record<string, 'suppress' | 'promote:rule' | 'promote:convention'>;
 }
+
+// --- Parsing ---
 
 export interface ParseResult {
   filePath: string;
@@ -37,6 +43,8 @@ export interface ExportInfo {
   line: number;
 }
 
+// --- Modules ---
+
 export interface ModuleInfo {
   id: string;
   name: string;
@@ -50,6 +58,8 @@ export interface ModuleInfo {
   internalDependencies: string[];
   externalDependencies: string[];
 }
+
+// --- Dependencies ---
 
 export interface DependencyEdge {
   source: string;
@@ -69,14 +79,41 @@ export interface DependencyGraph {
   layers: Array<{ name: string; modules: string[] }>;
 }
 
+// --- Rules (Schema v2) ---
+
+export type RuleCategory = 'boundary' | 'co-change' | 'naming' | 'layer' | 'ownership';
+export type RuleTier = 'observation' | 'convention' | 'rule';
+export type RuleTrend = 'stable' | 'strengthening' | 'weakening' | 'broken' | 'new';
+export type RuleSource = 'git-history' | 'static-analysis' | 'manual';
+
 export interface ArchRule {
   id: string;
-  type: 'boundary' | 'co-change' | 'naming-convention' | 'layer';
+  category: RuleCategory;
+  tier: RuleTier;
   confidence: number;
+  trend: RuleTrend;
+  scope: string[];
   description: string;
-  source: 'git-history' | 'static-analysis';
-  evidence: Record<string, unknown>;
+  action: string;
+  source: RuleSource;
+  evidence: RuleEvidence;
+  conflicts?: string[];
+
+  // Deprecated v1 compat — kept for migration
+  type?: string;
 }
+
+export interface RuleEvidence {
+  firstSeen: string;
+  commitsSampled: number;
+  recentViolations: number;
+  totalInstances: number;
+  matchingInstances: number;
+  promotedFrom?: RuleTier;
+  details?: Record<string, unknown>;
+}
+
+// --- Implicit Contracts ---
 
 export interface ImplicitContract {
   id: string;
@@ -87,7 +124,27 @@ export interface ImplicitContract {
   occurrences: number;
 }
 
+// --- Health Score ---
+
+export interface HealthScore {
+  overall: number; // 0-100
+  trend: RuleTrend;
+  breakdown: {
+    observations: { total: number; };
+    conventions: { total: number; violations: number; };
+    rules: { total: number; violations: number; };
+  };
+  moduleScores: Array<{
+    moduleId: string;
+    score: number;
+    violations: number;
+  }>;
+}
+
+// --- Scan Result ---
+
 export interface ScanResult {
+  schemaVersion: number;
   manifest: {
     version: string;
     generatedAt: string;
@@ -102,7 +159,11 @@ export interface ScanResult {
     totalDependencies: number;
     totalRules: number;
     totalContracts: number;
+    totalObservations: number;
+    totalConventions: number;
+    totalStrongRules: number;
   };
+  health: HealthScore;
   modules: ModuleInfo[];
   dependencies: DependencyGraph;
   rules: ArchRule[];
